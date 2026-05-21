@@ -1,0 +1,11 @@
+# Folders to ignore 
+data/anomaly_detection/*.csv 
+data/clustering/*.csv 
+data/synthetic/*.csv 
+__pycache__/ 
+*.pyc 
+.ipynb_checkpoints/ 
+.env 
+.xlsx
+.venv
+.idea
