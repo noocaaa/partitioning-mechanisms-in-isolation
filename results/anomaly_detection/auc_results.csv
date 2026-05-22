@@ -1,0 +1,145 @@
+dataset,partition,partition_name,kernel,timestamp,n,features,shape,density,dim_level,size_level,condition,source,anom_rate,auc_mean,auc_std,auc_min,auc_max,fit_time_s,transform_time_s,score_time_s,total_time_s,fit_time_std,auc_per_sec,phi_width,n_estimators,max_samples,n_runs
+breast_cancer,anne,Voronoi (aNNE),ik,2026-05-21 22:58:49,569,30,spherical,uniform,mid,medium,1,sklearn,,0.309,0.0305,0.2566,0.3399,0.0332,0.0187,0.0367,0.0886,0.004,3.4854,3200,200,16,5
+breast_cancer,anne,Voronoi (aNNE),idk,2026-05-21 22:58:49,569,30,spherical,uniform,mid,medium,1,sklearn,,0.309,0.0305,0.2566,0.3399,0.0319,0.0166,0.0515,0.1,0.0006,3.0903,3200,200,16,5
+breast_cancer,inne,Hypersphere (iNNE),ik,2026-05-21 22:58:57,569,30,spherical,uniform,mid,medium,1,sklearn,,0.9068,0.0346,0.8461,0.938,0.6768,0.4034,0.4078,1.488,0.7223,0.6094,3200,200,16,5
+breast_cancer,inne,Hypersphere (iNNE),idk,2026-05-21 22:59:03,569,30,spherical,uniform,mid,medium,1,sklearn,,0.8963,0.0523,0.7997,0.9387,0.3383,0.4108,0.4521,1.2011,0.0294,0.7463,3200,200,16,5
+breast_cancer,iforest,Axis-parallel (iForest),ik,2026-05-21 22:59:05,569,30,spherical,uniform,mid,medium,1,sklearn,,0.158,0.0164,0.1416,0.1826,0.2017,0.0625,0.0953,0.3595,0.0128,0.4395,1794,200,16,5
+breast_cancer,iforest,Axis-parallel (iForest),idk,2026-05-21 22:59:06,569,30,spherical,uniform,mid,medium,1,sklearn,,0.158,0.0164,0.1416,0.1826,0.1919,0.0613,0.0947,0.3479,0.0025,0.4543,1794,200,16,5
+breast_cancer,sciforest,Random hyperplane (SCiForest),ik,2026-05-21 22:59:34,569,30,spherical,uniform,mid,medium,1,sklearn,,0.3715,0.0565,0.2923,0.4414,1.7373,1.7173,1.9757,5.4303,0.0861,0.0684,3109,200,16,5
+breast_cancer,sciforest,Random hyperplane (SCiForest),idk,2026-05-21 23:00:02,569,30,spherical,uniform,mid,medium,1,sklearn,,0.3715,0.0565,0.2923,0.4414,1.9055,1.8005,1.9569,5.6628,0.2457,0.0656,3109,200,16,5
+wbc_uci,anne,Voronoi (aNNE),ik,2026-05-21 23:00:02,699,9,spherical,uniform,mid,small,1,UCI,,0.8902,0.0113,0.8784,0.9079,0.0327,0.0205,0.047,0.1002,0.0003,8.8815,3200,200,16,5
+wbc_uci,anne,Voronoi (aNNE),idk,2026-05-21 23:00:03,699,9,spherical,uniform,mid,small,1,UCI,,0.8902,0.0113,0.8784,0.9079,0.0359,0.0203,0.0607,0.117,0.0065,7.6103,3200,200,16,5
+wbc_uci,inne,Hypersphere (iNNE),ik,2026-05-21 23:00:07,699,9,spherical,uniform,mid,small,1,UCI,,0.0505,0.0044,0.046,0.0574,0.3898,0.2115,0.221,0.8223,0.0103,0.0614,3200,200,16,5
+wbc_uci,inne,Hypersphere (iNNE),idk,2026-05-21 23:00:12,699,9,spherical,uniform,mid,small,1,UCI,,0.0397,0.0031,0.0351,0.0436,0.412,0.237,0.2526,0.9016,0.0452,0.044,3200,200,16,5
+wbc_uci,iforest,Axis-parallel (iForest),ik,2026-05-21 23:00:14,699,9,spherical,uniform,mid,small,1,UCI,,0.9933,0.0004,0.9927,0.9936,0.1996,0.0774,0.1308,0.4078,0.0106,2.4357,1757,200,16,5
+wbc_uci,iforest,Axis-parallel (iForest),idk,2026-05-21 23:00:16,699,9,spherical,uniform,mid,small,1,UCI,,0.9933,0.0004,0.9927,0.9936,0.199,0.0773,0.1376,0.4138,0.0059,2.4001,1757,200,16,5
+wbc_uci,sciforest,Random hyperplane (SCiForest),ik,2026-05-21 23:00:43,699,9,spherical,uniform,mid,small,1,UCI,,0.9926,0.0009,0.9911,0.9937,1.8563,1.7799,1.7746,5.4108,0.1826,0.1835,2249,200,16,5
+wbc_uci,sciforest,Random hyperplane (SCiForest),idk,2026-05-21 23:01:09,699,9,spherical,uniform,mid,small,1,UCI,,0.9926,0.0009,0.9911,0.9937,1.77,1.7266,1.754,5.2506,0.0185,0.1891,2249,200,16,5
+breastw,anne,Voronoi (aNNE),ik,2026-05-21 23:01:10,683,9,spherical,uniform,low,small,1,ADBench,,0.8889,0.0188,0.8655,0.9069,0.0318,0.0185,0.0451,0.0953,0.0003,9.3247,3200,200,16,5
+breastw,anne,Voronoi (aNNE),idk,2026-05-21 23:01:10,683,9,spherical,uniform,low,small,1,ADBench,,0.8889,0.0188,0.8655,0.9069,0.0319,0.0186,0.0583,0.1089,0.0001,8.1657,3200,200,16,5
+breastw,inne,Hypersphere (iNNE),ik,2026-05-21 23:01:14,683,9,spherical,uniform,low,small,1,ADBench,,0.052,0.0055,0.0442,0.0607,0.3113,0.2094,0.2109,0.7316,0.002,0.0711,3200,200,16,5
+breastw,inne,Hypersphere (iNNE),idk,2026-05-21 23:01:18,683,9,spherical,uniform,low,small,1,ADBench,,0.0424,0.003,0.0379,0.0451,0.3244,0.2091,0.2442,0.7777,0.0213,0.0545,3200,200,16,5
+breastw,iforest,Axis-parallel (iForest),ik,2026-05-21 23:01:20,683,9,spherical,uniform,low,small,1,ADBench,,0.9945,0.0008,0.993,0.9952,0.1847,0.071,0.118,0.3736,0.0011,2.6617,1765,200,16,5
+breastw,iforest,Axis-parallel (iForest),idk,2026-05-21 23:01:22,683,9,spherical,uniform,low,small,1,ADBench,,0.9945,0.0008,0.993,0.9952,0.1856,0.0713,0.1097,0.3666,0.0026,2.7127,1765,200,16,5
+breastw,sciforest,Random hyperplane (SCiForest),ik,2026-05-21 23:01:47,683,9,spherical,uniform,low,small,1,ADBench,,0.9938,0.0007,0.9929,0.9944,1.7022,1.6736,1.7057,5.0815,0.0129,0.1956,2254,200,16,5
+breastw,sciforest,Random hyperplane (SCiForest),idk,2026-05-21 23:02:12,683,9,spherical,uniform,low,small,1,ADBench,,0.9938,0.0007,0.9929,0.9944,1.7025,1.6778,1.7164,5.0966,0.016,0.195,2254,200,16,5
+wbc,anne,Voronoi (aNNE),ik,2026-05-21 23:02:13,223,9,spherical,uniform,mid,small,1,ADBench,,0.98,0.0036,0.9758,0.9864,0.0307,0.0064,0.0097,0.0467,0.0014,20.9636,3200,200,16,5
+wbc,anne,Voronoi (aNNE),idk,2026-05-21 23:02:13,223,9,spherical,uniform,mid,small,1,ADBench,,0.98,0.0036,0.9758,0.9864,0.0301,0.0061,0.0186,0.0548,0.0001,17.8727,3200,200,16,5
+wbc,inne,Hypersphere (iNNE),ik,2026-05-21 23:02:16,223,9,spherical,uniform,mid,small,1,ADBench,,0.0162,0.0011,0.015,0.0183,0.3121,0.1717,0.1698,0.6535,0.0026,0.0247,3200,200,16,5
+wbc,inne,Hypersphere (iNNE),idk,2026-05-21 23:02:20,223,9,spherical,uniform,mid,small,1,ADBench,,0.0174,0.0012,0.0164,0.0197,0.3168,0.1744,0.1829,0.6741,0.0035,0.0258,3200,200,16,5
+wbc,iforest,Axis-parallel (iForest),ik,2026-05-21 23:02:21,223,9,spherical,uniform,mid,small,1,ADBench,,0.995,0.0007,0.9941,0.9958,0.1795,0.0219,0.0278,0.2293,0.0021,4.3392,1661,200,16,5
+wbc,iforest,Axis-parallel (iForest),idk,2026-05-21 23:02:22,223,9,spherical,uniform,mid,small,1,ADBench,,0.995,0.0007,0.9941,0.9958,0.1801,0.0222,0.0352,0.2375,0.0014,4.1887,1661,200,16,5
+wbc,sciforest,Random hyperplane (SCiForest),ik,2026-05-21 23:02:31,223,9,spherical,uniform,mid,small,1,ADBench,,0.993,0.0014,0.9911,0.9953,0.665,0.5886,0.5883,1.8419,0.0046,0.5391,2393,200,16,5
+wbc,sciforest,Random hyperplane (SCiForest),idk,2026-05-21 23:02:40,223,9,spherical,uniform,mid,small,1,ADBench,,0.993,0.0014,0.9911,0.9953,0.6633,0.5826,0.5982,1.8441,0.0035,0.5385,2393,200,16,5
+ionosphere,anne,Voronoi (aNNE),ik,2026-05-21 23:02:41,351,32,elliptical,uniform,mid,small,2,ADBench,,0.3889,0.0126,0.3694,0.4063,0.0302,0.0097,0.0171,0.057,0.0004,6.8226,3200,200,16,5
+ionosphere,anne,Voronoi (aNNE),idk,2026-05-21 23:02:41,351,32,elliptical,uniform,mid,small,2,ADBench,,0.3889,0.0126,0.3694,0.4063,0.0302,0.0097,0.0293,0.0693,0.0003,5.615,3200,200,16,5
+ionosphere,inne,Hypersphere (iNNE),ik,2026-05-21 23:02:45,351,32,elliptical,uniform,mid,small,2,ADBench,,0.7183,0.0212,0.6809,0.7353,0.3164,0.1906,0.1885,0.6955,0.005,1.0327,3200,200,16,5
+ionosphere,inne,Hypersphere (iNNE),idk,2026-05-21 23:02:48,351,32,elliptical,uniform,mid,small,2,ADBench,,0.6976,0.0248,0.6566,0.7234,0.3144,0.1871,0.2087,0.7102,0.0025,0.9823,3200,200,16,5
+ionosphere,iforest,Axis-parallel (iForest),ik,2026-05-21 23:02:50,351,32,elliptical,uniform,mid,small,2,ADBench,,0.7891,0.0068,0.7801,0.7974,0.1849,0.0361,0.0479,0.2689,0.0048,2.935,1815,200,16,5
+ionosphere,iforest,Axis-parallel (iForest),idk,2026-05-21 23:02:51,351,32,elliptical,uniform,mid,small,2,ADBench,,0.7891,0.0068,0.7801,0.7974,0.185,0.0364,0.0574,0.2788,0.0039,2.8299,1815,200,16,5
+ionosphere,sciforest,Random hyperplane (SCiForest),ik,2026-05-21 23:03:07,351,32,elliptical,uniform,mid,small,2,ADBench,,0.7919,0.0283,0.7514,0.8372,1.1413,1.0077,1.0548,3.2038,0.1213,0.2472,3067,200,16,5
+ionosphere,sciforest,Random hyperplane (SCiForest),idk,2026-05-21 23:03:23,351,32,elliptical,uniform,mid,small,2,ADBench,,0.7919,0.0283,0.7514,0.8372,1.2076,1.0666,1.0212,3.2954,0.1806,0.2403,3067,200,16,5
+syn_moons_ad,anne,Voronoi (aNNE),ik,2026-05-21 23:03:24,1000,2,crescent,uniform,low,medium,3,sklearn_gen,,0.9044,0.0172,0.8837,0.9275,0.0321,0.0265,0.0709,0.1296,0.0007,6.9792,3200,200,16,5
+syn_moons_ad,anne,Voronoi (aNNE),idk,2026-05-21 23:03:25,1000,2,crescent,uniform,low,medium,3,sklearn_gen,,0.9044,0.0172,0.8837,0.9275,0.0324,0.0261,0.0823,0.1407,0.0005,6.4265,3200,200,16,5
+syn_moons_ad,inne,Hypersphere (iNNE),ik,2026-05-21 23:03:30,1000,2,crescent,uniform,low,medium,3,sklearn_gen,,0.9436,0.0209,0.9169,0.9707,0.2985,0.4099,0.4127,1.1211,0.0019,0.8417,3200,200,16,5
+syn_moons_ad,inne,Hypersphere (iNNE),idk,2026-05-21 23:03:36,1000,2,crescent,uniform,low,medium,3,sklearn_gen,,0.9473,0.0175,0.9287,0.9717,0.2977,0.4112,0.4704,1.1793,0.0018,0.8032,3200,200,16,5
+syn_moons_ad,iforest,Axis-parallel (iForest),ik,2026-05-21 23:03:39,1000,2,crescent,uniform,low,medium,3,sklearn_gen,,0.8789,0.0086,0.871,0.8954,0.1836,0.1016,0.176,0.4611,0.0028,1.9059,1950,200,16,5
+syn_moons_ad,iforest,Axis-parallel (iForest),idk,2026-05-21 23:03:41,1000,2,crescent,uniform,low,medium,3,sklearn_gen,,0.8789,0.0086,0.871,0.8954,0.1798,0.1001,0.1525,0.4325,0.0011,2.0322,1950,200,16,5
+syn_moons_ad,sciforest,Random hyperplane (SCiForest),ik,2026-05-21 23:04:19,1000,2,crescent,uniform,low,medium,3,sklearn_gen,,0.9355,0.0187,0.9018,0.9545,2.5365,2.5121,2.5764,7.625,0.0329,0.1227,3168,200,16,5
+syn_moons_ad,sciforest,Random hyperplane (SCiForest),idk,2026-05-21 23:04:57,1000,2,crescent,uniform,low,medium,3,sklearn_gen,,0.9355,0.0187,0.9018,0.9545,2.5133,2.4756,2.5579,7.5468,0.0226,0.124,3168,200,16,5
+vowels,anne,Voronoi (aNNE),ik,2026-05-21 23:04:58,1456,12,irregular,uniform,low,medium,3,ADBench,,0.9204,0.0241,0.8841,0.9473,0.0333,0.0519,0.1405,0.2257,0.0008,4.0773,3200,200,16,5
+vowels,anne,Voronoi (aNNE),idk,2026-05-21 23:04:59,1456,12,irregular,uniform,low,medium,3,ADBench,,0.9204,0.0241,0.8841,0.9473,0.0336,0.0493,0.1297,0.2126,0.0012,4.3292,3200,200,16,5
+vowels,inne,Hypersphere (iNNE),ik,2026-05-21 23:05:03,1456,12,irregular,uniform,low,medium,3,ADBench,,0.8865,0.0277,0.8437,0.927,0.3059,0.2457,0.2601,0.8117,0.0051,1.0921,3200,200,16,5
+vowels,inne,Hypersphere (iNNE),idk,2026-05-21 23:05:07,1456,12,irregular,uniform,low,medium,3,ADBench,,0.8863,0.0268,0.8529,0.9283,0.3007,0.2428,0.3191,0.8626,0.0024,1.0275,3200,200,16,5
+vowels,iforest,Axis-parallel (iForest),ik,2026-05-21 23:05:10,1456,12,irregular,uniform,low,medium,3,ADBench,,0.6204,0.029,0.5803,0.669,0.1808,0.1445,0.3003,0.6256,0.0033,0.9917,1873,200,16,5
+vowels,iforest,Axis-parallel (iForest),idk,2026-05-21 23:05:13,1456,12,irregular,uniform,low,medium,3,ADBench,,0.6204,0.029,0.5803,0.669,0.1837,0.1483,0.2261,0.5582,0.0018,1.1116,1873,200,16,5
+vowels,sciforest,Random hyperplane (SCiForest),ik,2026-05-21 23:06:10,1456,12,irregular,uniform,low,medium,3,ADBench,,0.7423,0.0724,0.6415,0.8219,3.729,3.7127,3.8417,11.2834,0.0503,0.0658,3149,200,16,5
+vowels,sciforest,Random hyperplane (SCiForest),idk,2026-05-21 23:07:06,1456,12,irregular,uniform,low,medium,3,ADBench,,0.7423,0.0724,0.6414,0.8219,3.7052,3.7055,3.7999,11.2106,0.0455,0.0662,3149,200,16,5
+lympho,anne,Voronoi (aNNE),ik,2026-05-21 23:07:06,148,18,irregular,sparse,low,small,3,ADBench,,0.9986,0.0017,0.9953,1.0,0.0283,0.0049,0.0063,0.0395,0.0007,25.2918,3200,200,16,5
+lympho,anne,Voronoi (aNNE),idk,2026-05-21 23:07:06,148,18,irregular,sparse,low,small,3,ADBench,,0.9986,0.0017,0.9953,1.0,0.0284,0.0048,0.0127,0.0458,0.0003,21.782,3200,200,16,5
+lympho,inne,Hypersphere (iNNE),ik,2026-05-21 23:07:09,148,18,irregular,sparse,low,small,3,ADBench,,0.969,0.0115,0.9484,0.9824,0.2978,0.1589,0.1571,0.6139,0.0017,1.5786,3200,200,16,5
+lympho,inne,Hypersphere (iNNE),idk,2026-05-21 23:07:12,148,18,irregular,sparse,low,small,3,ADBench,,0.9819,0.0074,0.9695,0.9918,0.2953,0.158,0.1652,0.6185,0.0025,1.5876,3200,200,16,5
+lympho,iforest,Axis-parallel (iForest),ik,2026-05-21 23:07:13,148,18,irregular,sparse,low,small,3,ADBench,,0.9938,0.0026,0.9894,0.9971,0.1694,0.0143,0.0167,0.2004,0.0019,4.9591,1977,200,16,5
+lympho,iforest,Axis-parallel (iForest),idk,2026-05-21 23:07:14,148,18,irregular,sparse,low,small,3,ADBench,,0.9938,0.0026,0.9894,0.9971,0.1688,0.016,0.0225,0.2073,0.0018,4.7944,1977,200,16,5
+lympho,sciforest,Random hyperplane (SCiForest),ik,2026-05-21 23:07:20,148,18,irregular,sparse,low,small,3,ADBench,,0.9908,0.0071,0.98,1.0,0.4491,0.3586,0.3607,1.1684,0.0129,0.8481,2225,200,16,5
+lympho,sciforest,Random hyperplane (SCiForest),idk,2026-05-21 23:07:26,148,18,irregular,sparse,low,small,3,ADBench,,0.9908,0.0071,0.98,1.0,0.4261,0.3488,0.3562,1.1311,0.0057,0.876,2225,200,16,5
+thyroid,anne,Voronoi (aNNE),ik,2026-05-21 23:07:34,3772,6,mixed,varying,low,medium,5,ADBench,,0.9158,0.0103,0.8993,0.9278,0.0442,0.3326,1.2052,1.5819,0.0012,0.5789,3200,200,16,5
+thyroid,anne,Voronoi (aNNE),idk,2026-05-21 23:07:39,3772,6,mixed,varying,low,medium,5,ADBench,,0.9158,0.0103,0.8993,0.9278,0.0474,0.3134,0.5539,0.9147,0.003,1.0012,3200,200,16,5
+thyroid,inne,Hypersphere (iNNE),ik,2026-05-21 23:07:45,3772,6,mixed,varying,low,medium,5,ADBench,,0.401,0.0097,0.3891,0.4161,0.3656,0.4033,0.45,1.2189,0.0102,0.329,3200,200,16,5
+thyroid,inne,Hypersphere (iNNE),idk,2026-05-21 23:07:52,3772,6,mixed,varying,low,medium,5,ADBench,,0.3993,0.0099,0.3867,0.4124,0.3536,0.4094,0.6426,1.4056,0.0042,0.2841,3200,200,16,5
+thyroid,iforest,Axis-parallel (iForest),ik,2026-05-21 23:08:05,3772,6,mixed,varying,low,medium,5,ADBench,,0.9854,0.0063,0.9777,0.9922,0.2303,0.4858,2.0037,2.7198,0.0102,0.3623,1679,200,16,5
+thyroid,iforest,Axis-parallel (iForest),idk,2026-05-21 23:08:12,3772,6,mixed,varying,low,medium,5,ADBench,,0.9854,0.0063,0.9777,0.9922,0.221,0.4628,0.6731,1.3569,0.0038,0.7262,1679,200,16,5
+thyroid,sciforest,Random hyperplane (SCiForest),ik,2026-05-21 23:10:58,3772,6,mixed,varying,low,medium,5,ADBench,,0.9628,0.0145,0.9451,0.9846,10.687,10.8509,11.6645,33.2024,0.2066,0.029,3076,200,16,5
+thyroid,sciforest,Random hyperplane (SCiForest),idk,2026-05-21 23:13:38,3772,6,mixed,varying,low,medium,5,ADBench,,0.9628,0.0145,0.9451,0.9846,10.4958,10.7142,10.7768,31.9867,0.3915,0.0301,3076,200,16,5
+cardio,anne,Voronoi (aNNE),ik,2026-05-21 23:13:40,1831,21,mixed,varying,mid,medium,5,ADBench,,0.9537,0.0035,0.9487,0.9585,0.0336,0.083,0.2287,0.3454,0.001,2.7613,3200,200,16,5
+cardio,anne,Voronoi (aNNE),idk,2026-05-21 23:13:41,1831,21,mixed,varying,mid,medium,5,ADBench,,0.9537,0.0035,0.9487,0.9585,0.0345,0.0821,0.1831,0.2996,0.001,3.1833,3200,200,16,5
+cardio,inne,Hypersphere (iNNE),ik,2026-05-21 23:13:46,1831,21,mixed,varying,mid,medium,5,ADBench,,0.3281,0.0194,0.2944,0.3506,0.3021,0.277,0.3069,0.886,0.0019,0.3703,3200,200,16,5
+cardio,inne,Hypersphere (iNNE),idk,2026-05-21 23:13:51,1831,21,mixed,varying,mid,medium,5,ADBench,,0.4305,0.0309,0.386,0.4655,0.301,0.2787,0.3781,0.9579,0.0023,0.4494,3200,200,16,5
+cardio,iforest,Axis-parallel (iForest),ik,2026-05-21 23:13:55,1831,21,mixed,varying,mid,medium,5,ADBench,,0.9205,0.0115,0.9047,0.9383,0.185,0.1873,0.449,0.8214,0.003,1.1206,1810,200,16,5
+cardio,iforest,Axis-parallel (iForest),idk,2026-05-21 23:13:58,1831,21,mixed,varying,mid,medium,5,ADBench,,0.9205,0.0115,0.9047,0.9383,0.1866,0.1903,0.2869,0.6638,0.0018,1.3868,1810,200,16,5
+cardio,sciforest,Random hyperplane (SCiForest),ik,2026-05-21 23:15:10,1831,21,mixed,varying,mid,medium,5,ADBench,,0.924,0.0183,0.8914,0.9427,4.6828,4.7322,4.8989,14.3138,0.037,0.0646,2991,200,16,5
+cardio,sciforest,Random hyperplane (SCiForest),idk,2026-05-21 23:16:21,1831,21,mixed,varying,mid,medium,5,ADBench,,0.924,0.0182,0.8914,0.9427,4.6817,4.6996,4.8133,14.1946,0.0676,0.0651,2991,200,16,5
+satellite,anne,Voronoi (aNNE),ik,2026-05-21 23:16:35,6435,36,mixed,varying,high,large,6,ADBench,,0.7784,0.0025,0.7749,0.7811,0.0511,0.4818,2.2564,2.7894,0.001,0.279,3200,200,16,5
+satellite,anne,Voronoi (aNNE),idk,2026-05-21 23:16:41,6435,36,mixed,varying,high,large,6,ADBench,,0.7784,0.0025,0.7749,0.7811,0.0515,0.4538,0.8168,1.3221,0.0004,0.5887,3200,200,16,5
+satellite,inne,Hypersphere (iNNE),ik,2026-05-21 23:16:55,6435,36,mixed,varying,high,large,6,ADBench,,0.5526,0.0278,0.5086,0.5909,0.3195,0.9388,1.4488,2.7071,0.0028,0.2041,3200,200,16,5
+satellite,inne,Hypersphere (iNNE),idk,2026-05-21 23:17:08,6435,36,mixed,varying,high,large,6,ADBench,,0.6594,0.0361,0.6291,0.7238,0.3183,0.9456,1.3091,2.5729,0.0039,0.2563,3200,200,16,5
+satellite,iforest,Axis-parallel (iForest),ik,2026-05-21 23:17:32,6435,36,mixed,varying,high,large,6,ADBench,,0.6449,0.0285,0.6118,0.6909,0.2227,0.6704,3.9091,4.8022,0.0038,0.1343,1881,200,16,5
+satellite,iforest,Axis-parallel (iForest),idk,2026-05-21 23:17:41,6435,36,mixed,varying,high,large,6,ADBench,,0.6449,0.0285,0.6118,0.6909,0.2175,0.6659,1.0088,1.8921,0.0059,0.3408,1881,200,16,5
+satellite,sciforest,Random hyperplane (SCiForest),ik,2026-05-21 23:21:57,6435,36,mixed,varying,high,large,6,ADBench,,0.6718,0.0271,0.6389,0.7124,16.0801,16.3667,18.6464,51.0932,0.0583,0.0131,3129,200,16,5
+satellite,sciforest,Random hyperplane (SCiForest),idk,2026-05-21 23:26:03,6435,36,mixed,varying,high,large,6,ADBench,,0.6718,0.0271,0.6389,0.7124,16.026,16.4839,16.7335,49.2434,0.0711,0.0136,3129,200,16,5
+musk,anne,Voronoi (aNNE),ik,2026-05-21 23:26:07,3062,166,mixed,uniform,vhigh,medium,6,ADBench,,0.9732,0.009,0.961,0.9839,0.041,0.2002,0.5713,0.8125,0.0006,1.1977,3200,200,16,5
+musk,anne,Voronoi (aNNE),idk,2026-05-21 23:26:10,3062,166,mixed,uniform,vhigh,medium,6,ADBench,,0.9732,0.009,0.961,0.9839,0.0412,0.1995,0.3619,0.6027,0.0007,1.6149,3200,200,16,5
+musk,inne,Hypersphere (iNNE),ik,2026-05-21 23:26:27,3062,166,mixed,uniform,vhigh,medium,6,ADBench,,0.9911,0.0037,0.9857,0.9954,0.3106,1.346,1.7013,3.3579,0.001,0.2952,3200,200,16,5
+musk,inne,Hypersphere (iNNE),idk,2026-05-21 23:26:43,3062,166,mixed,uniform,vhigh,medium,6,ADBench,,0.986,0.0058,0.9758,0.9918,0.3092,1.3441,1.5073,3.1606,0.0019,0.312,3200,200,16,5
+musk,iforest,Axis-parallel (iForest),ik,2026-05-21 23:26:50,3062,166,mixed,uniform,vhigh,medium,6,ADBench,,0.867,0.0426,0.794,0.9187,0.2012,0.3207,0.9856,1.5075,0.0154,0.5751,1895,200,16,5
+musk,iforest,Axis-parallel (iForest),idk,2026-05-21 23:26:55,3062,166,mixed,uniform,vhigh,medium,6,ADBench,,0.867,0.0426,0.794,0.9187,0.1956,0.3195,0.4808,0.9959,0.0044,0.8705,1895,200,16,5
+musk,sciforest,Random hyperplane (SCiForest),ik,2026-05-21 23:28:53,3062,166,mixed,uniform,vhigh,medium,6,ADBench,,0.9119,0.0782,0.7652,0.9841,7.6145,7.6839,8.1972,23.4956,0.0614,0.0388,3144,200,16,5
+musk,sciforest,Random hyperplane (SCiForest),idk,2026-05-21 23:30:49,3062,166,mixed,uniform,vhigh,medium,6,ADBench,,0.9119,0.0782,0.7652,0.9841,7.5806,7.671,7.9464,23.198,0.0676,0.0393,3144,200,16,5
+optdigits,anne,Voronoi (aNNE),ik,2026-05-21 23:31:00,5216,64,mixed,uniform,high,medium,6,ADBench,,0.8474,0.0534,0.7745,0.9267,0.0477,0.387,1.7587,2.1934,0.0016,0.3863,3200,200,16,5
+optdigits,anne,Voronoi (aNNE),idk,2026-05-21 23:31:05,5216,64,mixed,uniform,high,medium,6,ADBench,,0.8474,0.0534,0.7745,0.9267,0.0479,0.3802,0.6783,1.1064,0.0018,0.7659,3200,200,16,5
+optdigits,inne,Hypersphere (iNNE),ik,2026-05-21 23:31:30,5216,64,mixed,uniform,high,medium,6,ADBench,,0.8666,0.0494,0.7929,0.941,0.3181,1.6993,2.9356,4.953,0.0017,0.175,3200,200,16,5
+optdigits,inne,Hypersphere (iNNE),idk,2026-05-21 23:31:50,5216,64,mixed,uniform,high,medium,6,ADBench,,0.8652,0.0535,0.7921,0.9467,0.3149,1.6888,1.9805,3.9842,0.0014,0.2171,3200,200,16,5
+optdigits,iforest,Axis-parallel (iForest),ik,2026-05-21 23:32:07,5216,64,mixed,uniform,high,medium,6,ADBench,,0.7252,0.0284,0.6785,0.7626,0.2236,0.5544,2.6396,3.4175,0.0163,0.2122,1916,200,16,5
+optdigits,iforest,Axis-parallel (iForest),idk,2026-05-21 23:32:15,5216,64,mixed,uniform,high,medium,6,ADBench,,0.7252,0.0284,0.6785,0.7626,0.2179,0.5576,0.8358,1.6113,0.0007,0.45,1916,200,16,5
+optdigits,sciforest,Random hyperplane (SCiForest),ik,2026-05-21 23:35:03,5216,64,mixed,uniform,high,medium,6,ADBench,,0.6645,0.0499,0.5972,0.7238,10.3262,10.5328,12.6664,33.5253,0.3093,0.0198,2331,200,16,5
+optdigits,sciforest,Random hyperplane (SCiForest),idk,2026-05-21 23:37:41,5216,64,mixed,uniform,high,medium,6,ADBench,,0.6645,0.0499,0.5972,0.7238,10.2417,10.5077,10.8218,31.5712,0.2902,0.021,2331,200,16,5
+pendigits,anne,Voronoi (aNNE),ik,2026-05-21 23:37:57,6870,16,mixed,uniform,low,large,6,ADBench,,0.9395,0.021,0.9015,0.9651,0.051,0.4923,2.7424,3.2857,0.0013,0.2859,3200,200,16,5
+pendigits,anne,Voronoi (aNNE),idk,2026-05-21 23:38:04,6870,16,mixed,uniform,low,large,6,ADBench,,0.9395,0.021,0.9015,0.965,0.0521,0.4984,0.8835,1.434,0.0011,0.6552,3200,200,16,5
+pendigits,inne,Hypersphere (iNNE),ik,2026-05-21 23:38:24,6870,16,mixed,uniform,low,large,6,ADBench,,0.8893,0.0358,0.8211,0.9157,0.3233,1.2446,2.3633,3.9312,0.0124,0.2262,3200,200,16,5
+pendigits,inne,Hypersphere (iNNE),idk,2026-05-21 23:38:40,6870,16,mixed,uniform,low,large,6,ADBench,,0.9137,0.0248,0.8739,0.9472,0.3202,1.2061,1.5809,3.1072,0.0069,0.2941,3200,200,16,5
+pendigits,iforest,Axis-parallel (iForest),ik,2026-05-21 23:39:07,6870,16,mixed,uniform,low,large,6,ADBench,,0.9432,0.0057,0.9375,0.9505,0.2348,0.736,4.4564,5.4271,0.0076,0.1738,1980,200,16,5
+pendigits,iforest,Axis-parallel (iForest),idk,2026-05-21 23:39:17,6870,16,mixed,uniform,low,large,6,ADBench,,0.9432,0.0057,0.9375,0.9505,0.2249,0.7245,1.0928,2.0422,0.0039,0.4619,1980,200,16,5
+pendigits,sciforest,Random hyperplane (SCiForest),ik,2026-05-21 23:43:42,6870,16,mixed,uniform,low,large,6,ADBench,,0.8639,0.0911,0.728,0.9786,16.5177,16.815,19.6137,52.9465,0.1763,0.0163,3151,200,16,5
+pendigits,sciforest,Random hyperplane (SCiForest),idk,2026-05-21 23:47:54,6870,16,mixed,uniform,low,large,6,ADBench,,0.8639,0.0911,0.728,0.9786,16.5043,16.8654,17.1107,50.4804,0.2295,0.0171,3151,200,16,5
+syn_large_10k,anne,Voronoi (aNNE),ik,2026-05-22 00:30:39,10000,2,spherical,uniform,low,large,7,sklearn_gen,,0.5996,0.1125,0.4536,0.7216,0.0805,1.0257,7.4094,8.5156,0.0115,0.0704,3200,200,16,5
+syn_large_10k,anne,Voronoi (aNNE),idk,2026-05-22 00:30:54,10000,2,spherical,uniform,low,large,7,sklearn_gen,,0.5996,0.1125,0.4536,0.7216,0.0837,0.9635,1.7971,2.8443,0.0195,0.2108,3200,200,16,5
+syn_large_10k,inne,Hypersphere (iNNE),ik,2026-05-22 00:31:12,10000,2,spherical,uniform,low,large,7,sklearn_gen,,0.6209,0.1107,0.5277,0.8234,1.0632,0.9728,1.7355,3.7716,1.2355,0.1646,3200,200,16,5
+syn_large_10k,inne,Hypersphere (iNNE),idk,2026-05-22 00:31:28,10000,2,spherical,uniform,low,large,7,sklearn_gen,,0.6265,0.1111,0.5294,0.8233,0.4513,0.9505,1.6905,3.0923,0.0257,0.2026,3200,200,16,5
+syn_large_10k,iforest,Axis-parallel (iForest),ik,2026-05-22 00:32:43,10000,2,spherical,uniform,low,large,7,sklearn_gen,,0.3983,0.0486,0.3439,0.4816,0.3386,1.456,13.2152,15.0098,0.0532,0.0265,1966,200,16,5
+syn_large_10k,iforest,Axis-parallel (iForest),idk,2026-05-22 00:33:03,10000,2,spherical,uniform,low,large,7,sklearn_gen,,0.3983,0.0486,0.3439,0.4816,0.3239,1.6137,2.1111,4.0487,0.0764,0.0984,1966,200,16,5
+syn_large_10k,sciforest,Random hyperplane (SCiForest),ik,2026-05-22 00:42:06,10000,2,spherical,uniform,low,large,7,sklearn_gen,,0.4662,0.0499,0.4009,0.555,32.8767,32.9951,42.6502,108.5219,3.1762,0.0043,3166,200,16,5
+syn_large_10k,sciforest,Random hyperplane (SCiForest),idk,2026-05-22 00:48:23,10000,2,spherical,uniform,low,large,7,sklearn_gen,,0.4662,0.0499,0.4009,0.555,24.3531,25.354,25.6569,75.3639,0.5916,0.0062,3166,200,16,5
+syn_large_20k,anne,Voronoi (aNNE),ik,2026-05-22 00:48:54,10000,2,spherical,uniform,low,large,7,sklearn_gen,,0.5727,0.0968,0.4013,0.6854,0.0645,0.7381,5.3148,6.1174,0.0018,0.0936,3200,200,16,5
+syn_large_20k,anne,Voronoi (aNNE),idk,2026-05-22 00:49:04,10000,2,spherical,uniform,low,large,7,sklearn_gen,,0.5727,0.0968,0.4013,0.6854,0.0657,0.7502,1.3358,2.1518,0.0007,0.2661,3200,200,16,5
+syn_large_20k,inne,Hypersphere (iNNE),ik,2026-05-22 00:49:16,10000,2,spherical,uniform,low,large,7,sklearn_gen,,0.6111,0.0805,0.5311,0.743,0.372,0.686,1.2961,2.3541,0.0067,0.2596,3200,200,16,5
+syn_large_20k,inne,Hypersphere (iNNE),idk,2026-05-22 00:49:28,10000,2,spherical,uniform,low,large,7,sklearn_gen,,0.627,0.0914,0.5338,0.7753,0.3728,0.685,1.2582,2.316,0.0049,0.2707,3200,200,16,5
+syn_large_20k,iforest,Axis-parallel (iForest),ik,2026-05-22 00:50:21,10000,2,spherical,uniform,low,large,7,sklearn_gen,,0.3868,0.0303,0.3372,0.4236,0.27,1.1099,9.2983,10.6782,0.0194,0.0362,1967,200,16,5
+syn_large_20k,iforest,Axis-parallel (iForest),idk,2026-05-22 00:50:36,10000,2,spherical,uniform,low,large,7,sklearn_gen,,0.3868,0.0303,0.3372,0.4236,0.2577,1.0928,1.6481,2.9986,0.0038,0.129,1967,200,16,5
+syn_large_20k,sciforest,Random hyperplane (SCiForest),ik,2026-05-22 00:58:08,10000,2,spherical,uniform,low,large,7,sklearn_gen,,0.552,0.1424,0.4282,0.82,27.3867,28.0535,34.7973,90.2375,1.7239,0.0061,3169,200,16,5
+syn_large_20k,sciforest,Random hyperplane (SCiForest),idk,2026-05-22 01:05:18,10000,2,spherical,uniform,low,large,7,sklearn_gen,,0.552,0.1424,0.4282,0.82,27.8331,28.8746,29.4128,86.1205,0.525,0.0064,3169,200,16,5
+annthyroid,anne,Voronoi (aNNE),ik,2026-05-22 01:05:39,7200,6,mixed,varying,low,large,7,ADBench,,0.6353,0.0051,0.628,0.6415,0.0682,0.588,3.5554,4.2116,0.0114,0.1509,3200,200,16,5
+annthyroid,anne,Voronoi (aNNE),idk,2026-05-22 01:05:48,7200,6,mixed,varying,low,large,7,ADBench,,0.6353,0.0051,0.628,0.6415,0.0645,0.5658,1.118,1.7483,0.007,0.3634,3200,200,16,5
+annthyroid,inne,Hypersphere (iNNE),ik,2026-05-22 01:06:01,7200,6,mixed,varying,low,large,7,ADBench,,0.5266,0.0071,0.5173,0.5328,0.5908,0.8897,1.0953,2.5758,0.0477,0.2044,3200,200,16,5
+annthyroid,inne,Hypersphere (iNNE),idk,2026-05-22 01:06:14,7200,6,mixed,varying,low,large,7,ADBench,,0.5274,0.0068,0.5187,0.5338,0.5638,0.7209,1.3226,2.6074,0.0141,0.2023,3200,200,16,5
+annthyroid,iforest,Axis-parallel (iForest),ik,2026-05-22 01:06:53,7200,6,mixed,varying,low,large,7,ADBench,,0.8533,0.0126,0.8385,0.8687,0.2646,0.8574,6.6375,7.7595,0.0023,0.11,1692,200,16,5
+annthyroid,iforest,Axis-parallel (iForest),idk,2026-05-22 01:07:06,7200,6,mixed,varying,low,large,7,ADBench,,0.8533,0.0126,0.8385,0.8687,0.2727,0.8643,1.3811,2.5181,0.0101,0.3389,1692,200,16,5
+annthyroid,sciforest,Random hyperplane (SCiForest),ik,2026-05-22 01:12:44,7200,6,mixed,varying,low,large,7,ADBench,,0.6922,0.0414,0.6405,0.7441,21.2543,21.3158,25.1377,67.7078,1.377,0.0102,3085,200,16,5
+annthyroid,sciforest,Random hyperplane (SCiForest),idk,2026-05-22 01:17:31,7200,6,mixed,varying,low,large,7,ADBench,,0.6922,0.0414,0.6405,0.7441,18.5107,19.2148,19.6126,57.3382,0.1598,0.0121,3085,200,16,5
+shuttle,anne,Voronoi (aNNE),ik,2026-05-22 01:18:03,10000,9,mixed,uniform,low,large,7,ADBench,,0.8511,0.0369,0.7899,0.9028,0.0612,0.7459,5.5094,6.3165,0.0013,0.1347,3200,200,16,5
+shuttle,anne,Voronoi (aNNE),idk,2026-05-22 01:18:13,10000,9,mixed,uniform,low,large,7,ADBench,,0.8511,0.0369,0.7899,0.9028,0.0638,0.7535,1.3055,2.1228,0.0008,0.4009,3200,200,16,5
+shuttle,inne,Hypersphere (iNNE),ik,2026-05-22 01:18:23,10000,9,mixed,uniform,low,large,7,ADBench,,0.0382,0.0024,0.0362,0.0428,0.3397,0.6438,1.0029,1.9864,0.0113,0.0192,3200,200,16,5
+shuttle,inne,Hypersphere (iNNE),idk,2026-05-22 01:18:34,10000,9,mixed,uniform,low,large,7,ADBench,,0.0452,0.0024,0.0408,0.0481,0.3312,0.6193,1.1784,2.1289,0.0051,0.0213,3200,200,16,5
+shuttle,iforest,Axis-parallel (iForest),ik,2026-05-22 01:19:41,10000,9,mixed,uniform,low,large,7,ADBench,,0.9932,0.0005,0.9927,0.9939,0.2554,1.0558,12.0944,13.4056,0.0082,0.0741,1657,200,16,5
+shuttle,iforest,Axis-parallel (iForest),idk,2026-05-22 01:19:55,10000,9,mixed,uniform,low,large,7,ADBench,,0.9932,0.0005,0.9927,0.9939,0.2469,1.0406,1.552,2.8394,0.0133,0.3498,1657,200,16,5
+shuttle,sciforest,Random hyperplane (SCiForest),ik,2026-05-22 01:26:56,10000,9,mixed,uniform,low,large,7,ADBench,,0.9865,0.0084,0.9716,0.9961,25.2515,26.2503,32.6575,84.1594,0.1714,0.0117,3003,200,16,5
+shuttle,sciforest,Random hyperplane (SCiForest),idk,2026-05-22 01:33:27,10000,9,mixed,uniform,low,large,7,ADBench,,0.9865,0.0084,0.9716,0.9961,25.1901,26.196,26.6582,78.0443,0.1581,0.0126,3003,200,16,5
