@@ -389,11 +389,13 @@ print('\nCondition 7 — Large (efficiency):')
 
 X, y = make_blobs(n_samples=10000, centers=5,
                   cluster_std=1.5, random_state=42)
+y = (y == 0).astype(int)   # cluster 0 = anomaly, rest = normal
 _register('syn_large_10k', X, y,
           'AD', 'spherical', 'uniform', 'low', 'large', 'sklearn_gen', 7)
 
 X, y = make_blobs(n_samples=20000, centers=5,
                   cluster_std=1.5, random_state=42)
+y = (y == 0).astype(int)   # cluster 0 = anomaly, rest = normal
 _register('syn_large_20k', X, y,
           'AD', 'spherical', 'uniform', 'low', 'large', 'sklearn_gen', 7)
 

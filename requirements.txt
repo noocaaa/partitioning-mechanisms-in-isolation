@@ -5,3 +5,7 @@ numpy
 matplotlib 
 seaborn 
 jupyter 
+ucimlrepo
+plotly
+dash
+scipy
