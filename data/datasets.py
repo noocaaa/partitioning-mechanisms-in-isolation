@@ -1,7 +1,7 @@
 """
 datasets.py  —  IK Partitioning Study
 ======================================
-Loads all datasets for the study.
+Registers all datasets for the study. Data is loaded lazily on first access.
 
 Sources
 -------
@@ -13,12 +13,15 @@ Sources
 Usage
 -----
     from data.datasets import DATASETS, print_summary
-    print_summary()
+    print_summary()          # shows metadata without loading any data
 
-    for name, ds in DATASETS.items():
-        X, y = ds['X'], ds['y']   # normalized X, integer y
-        task = ds['task']         # 'C' or 'AD'
-        cond = ds['condition']    # 1-7
+    ds = DATASETS['iris']    # triggers load of 'iris' only
+    X, y = ds['X'], ds['y']  # normalized X, integer y
+    task = ds['task']        # 'C' or 'AD'
+    cond = ds['condition']   # 1-7
+
+    for name, ds in DATASETS.items():   # each dataset loaded as iterated
+        X, y = ds['X'], ds['y']
 """
 
 import os
@@ -38,7 +41,6 @@ from sklearn.datasets import (
 warnings.filterwarnings('ignore')
 
 # ── ADBench filename map ───────────────────────────────────────────────────
-# Maps friendly name → exact filename in ADBench GitHub repo
 ADBENCH_FILES = {
     'annthyroid':  '2_annthyroid.npz',
     'breastw':     '4_breastw.npz',
@@ -66,66 +68,126 @@ ADBENCH_BASE = (
 
 SAVE_DIR = 'data/anomaly_detection'
 
-# ── Storage ────────────────────────────────────────────────────────────────
-DATASETS = {}
+
+# ══════════════════════════════════════════════════════════════════════════
+# LAZY DATASET CONTAINER
+# ══════════════════════════════════════════════════════════════════════════
+
+class _LazyDataset:
+    """
+    Holds dataset metadata immediately; defers loading X/y until first access.
+
+    Behaves like a plain dict: ds['X'], ds['y'], ds['task'], ds['condition'], ...
+    """
+
+    def __init__(self, name, loader, task, shape, density,
+                 dim_level, size_level, source, condition):
+        self._loader = loader
+        self._data   = None           # populated on first access
+        self._meta = dict(
+            name=name, task=task,
+            shape=shape, density=density,
+            dim_level=dim_level, size_level=size_level,
+            source=source, condition=condition,
+        )
+
+    def _ensure_loaded(self):
+        if self._data is None:
+            self._load()
+
+    def _load(self):
+        result = self._loader()
+        if result is None:
+            raise RuntimeError(
+                f"Dataset '{self._meta['name']}' could not be loaded.")
+        X_raw, y_raw = result
+        X = MinMaxScaler().fit_transform(np.nan_to_num(X_raw.astype(float)))
+        y = LabelEncoder().fit_transform(np.array(y_raw).ravel())
+        name = self._meta['name']
+        src_tag = '[synth]' if self._meta['source'] == 'sklearn_gen' else '[real ]'
+        print(f'  OK   {src_tag} {name:28s} '
+              f'n={X.shape[0]:6d}  feat={X.shape[1]:4d}  '
+              f'task={self._meta["task"]}  cond={self._meta["condition"]}')
+        self._data = dict(X=X, y=y, n=X.shape[0], features=X.shape[1])
+
+    def __getitem__(self, key):
+        if key in ('X', 'y', 'n', 'features'):
+            self._ensure_loaded()
+            return self._data[key]
+        return self._meta[key]
+
+    def __contains__(self, key):
+        return key in self._meta or key in ('X', 'y', 'n', 'features')
+
+    def get(self, key, default=None):
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+    def keys(self):
+        self._ensure_loaded()
+        return {**self._meta, **self._data}.keys()
+
+    def values(self):
+        self._ensure_loaded()
+        return {**self._meta, **self._data}.values()
+
+    def items(self):
+        self._ensure_loaded()
+        return {**self._meta, **self._data}.items()
+
+    def __repr__(self):
+        state = '(loaded)' if self._data is not None else '(not loaded)'
+        return f"<LazyDataset '{self._meta['name']}' cond={self._meta['condition']} {state}>"
+
+
+class _LazyDatasetDict(dict):
+    """dict subclass; yields _LazyDataset values without auto-loading."""
+
+    def items(self):
+        for k, v in super().items():
+            yield k, v
+
+    def loaded(self):
+        """Return mapping of already-loaded datasets (no side effects)."""
+        return {k: v for k, v in super().items() if v._data is not None}
+
+
+DATASETS = _LazyDatasetDict()
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# HELPERS
+# REGISTRATION HELPERS
 # ══════════════════════════════════════════════════════════════════════════
 
-def _normalize(X):
-    return MinMaxScaler().fit_transform(
-        np.nan_to_num(X.astype(float)))
-
-
-def _encode(y):
-    return LabelEncoder().fit_transform(np.array(y).ravel())
-
-
-def _register(name, X, y, task, shape, density,
-               dim_level, size_level, source, condition):
-    """Normalize, encode, store and print one dataset."""
-    X = _normalize(X)
-    y = _encode(y)
-    DATASETS[name] = dict(
-        name=name, X=X, y=y, task=task,
-        n=X.shape[0], features=X.shape[1],
+def _register(name, loader, task, shape, density,
+              dim_level, size_level, source, condition):
+    """Register a dataset with a loader callable. No data is loaded yet."""
+    DATASETS[name] = _LazyDataset(
+        name=name, loader=loader, task=task,
         shape=shape, density=density,
         dim_level=dim_level, size_level=size_level,
         source=source, condition=condition,
     )
-    src_tag = '[synth]' if source in ('sklearn_gen',) else '[real ]'
-    print(f'  OK   {src_tag} {name:28s} '
-          f'n={X.shape[0]:6d}  feat={X.shape[1]:4d}  '
-          f'task={task}  cond={condition}')
 
 
 def _download_adbench(name):
-    """
-    Download one ADBench dataset from GitHub.
-    Returns local path on success, None on failure.
-    """
     fname = ADBENCH_FILES.get(name)
     if fname is None:
         return None
-
     os.makedirs(SAVE_DIR, exist_ok=True)
     dest = os.path.join(SAVE_DIR, fname)
-
     if os.path.exists(dest):
-        return dest   # already downloaded
-
+        return dest
     url = f'{ADBENCH_BASE}/{fname}'
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
-
     try:
-        req = urllib.request.Request(
-            url, headers={'User-Agent': 'Mozilla/5.0'})
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         data = urllib.request.urlopen(req, context=ctx, timeout=20).read()
-        np.load(io.BytesIO(data), allow_pickle=True)   # validate
+        np.load(io.BytesIO(data), allow_pickle=True)
         with open(dest, 'wb') as f:
             f.write(data)
         return dest
@@ -134,30 +196,21 @@ def _download_adbench(name):
 
 
 def _load_adbench(name):
-    """
-    Load ADBench dataset: local file → download → None.
-    Returns (X, y) or (None, None).
-    """
     fname = ADBENCH_FILES.get(name)
     if fname is None:
-        return None, None
-
-    # local file already there?
+        return None
     local = os.path.join(SAVE_DIR, fname)
     if not os.path.exists(local):
         print(f'         downloading {name}...', end=' ', flush=True)
         local = _download_adbench(name)
         print('OK' if local else 'FAILED')
-
     if local and os.path.exists(local):
         d = np.load(local, allow_pickle=True)
         return d['X'].astype(float), d['y'].ravel().astype(int)
-
-    return None, None
+    return None
 
 
 def _load_uci(dataset_id):
-    """Load a UCI dataset via ucimlrepo. Returns (X, y)."""
     from ucimlrepo import fetch_ucirepo
     ds = fetch_ucirepo(id=dataset_id)
     X = ds.data.features.values.astype(float)
@@ -165,252 +218,206 @@ def _load_uci(dataset_id):
     return X, y
 
 
-def _try_uci(name, dataset_id, task, shape, density,
-             dim_level, size_level, condition):
-    """Attempt to load a UCI dataset; skip gracefully on failure."""
-    try:
-        X, y = _load_uci(dataset_id)
-        _register(name, X, y, task, shape, density,
-                  dim_level, size_level, 'UCI', condition)
-    except Exception as e:
-        print(f'  SKIP {name:30s} (ucimlrepo id={dataset_id}): '
-              f'{str(e)[:60]}')
+def _register_uci(name, dataset_id, task, shape, density,
+                  dim_level, size_level, condition):
+    def _loader():
+        try:
+            return _load_uci(dataset_id)
+        except Exception as e:
+            print(f'  SKIP {name:30s} (ucimlrepo id={dataset_id}): {str(e)[:60]}')
+            return None
+    _register(name, _loader, task, shape, density,
+              dim_level, size_level, 'UCI', condition)
 
 
-def _try_adbench(name, task, shape, density,
-                 dim_level, size_level, condition):
-    """Attempt to load an ADBench dataset; skip gracefully on failure."""
-    X, y = _load_adbench(name)
-    if X is not None:
-        _register(name, X, y, task, shape, density,
-                  dim_level, size_level, 'ADBench', condition)
-    else:
-        print(f'  SKIP {name:30s} '
-              f'(place {ADBENCH_FILES.get(name,"")} '
-              f'in {SAVE_DIR}/)')
+def _register_adbench(name, task, shape, density,
+                      dim_level, size_level, condition):
+    def _loader():
+        result = _load_adbench(name)
+        if result is None:
+            print(f'  SKIP {name:30s} (place {ADBENCH_FILES.get(name,"")} in {SAVE_DIR}/)')
+        return result
+    _register(name, _loader, task, shape, density,
+              dim_level, size_level, 'ADBench', condition)
 
 
 # ══════════════════════════════════════════════════════════════════════════
 # CONDITION 1 — Spherical clusters
-# Baseline: all 4 partitions should perform similarly here
 # ══════════════════════════════════════════════════════════════════════════
-print('\nCondition 1 — Spherical (baseline):')
 
-d = load_iris()
-_register('iris', d.data, d.target,
+_register('iris',
+          lambda: (load_iris().data, load_iris().target),
           'C', 'spherical', 'uniform', 'low', 'small', 'sklearn', 1)
 
-d = load_breast_cancer()
-_register('breast_cancer', d.data, d.target,
+_register('breast_cancer',
+          lambda: (load_breast_cancer().data, load_breast_cancer().target),
           'AD', 'spherical', 'uniform', 'mid', 'medium', 'sklearn', 1)
 
-X, y = make_blobs(n_samples=500, centers=3,
-                  cluster_std=0.8, random_state=42)
-_register('syn_blobs_small', X, y,
+_register('syn_blobs_small',
+          lambda: make_blobs(n_samples=500, centers=3, cluster_std=0.8, random_state=42),
           'C', 'spherical', 'uniform', 'low', 'small', 'sklearn_gen', 1)
 
-X, y = make_blobs(n_samples=3000, centers=4,
-                  cluster_std=1.0, random_state=42)
-_register('syn_blobs_medium', X, y,
+_register('syn_blobs_medium',
+          lambda: make_blobs(n_samples=3000, centers=4, cluster_std=1.0, random_state=42),
           'C', 'spherical', 'uniform', 'low', 'medium', 'sklearn_gen', 1)
 
-_try_uci('wbc_uci', 15,
-         'AD', 'spherical', 'uniform', 'mid', 'small', 1)
-
-_try_adbench('breastw',
-             'AD', 'spherical', 'uniform', 'low', 'small', 1)
-
-_try_adbench('wbc',
-             'AD', 'spherical', 'uniform', 'mid', 'small', 1)
+_register_uci('wbc_uci', 15, 'AD', 'spherical', 'uniform', 'mid', 'small', 1)
+_register_adbench('breastw', 'AD', 'spherical', 'uniform', 'low', 'small', 1)
+_register_adbench('wbc', 'AD', 'spherical', 'uniform', 'mid', 'small', 1)
 
 
 # ══════════════════════════════════════════════════════════════════════════
 # CONDITION 2 — Elongated / elliptical clusters
-# iForest (axis-parallel) struggles; random hyperplane should win
 # ══════════════════════════════════════════════════════════════════════════
-print('\nCondition 2 — Elongated / elliptical:')
 
-d = load_wine()
-_register('wine', d.data, d.target,
+_register('wine',
+          lambda: (load_wine().data, load_wine().target),
           'C', 'elliptical', 'uniform', 'low', 'small', 'sklearn', 2)
 
-X, y = make_blobs(n_samples=500, centers=3,
-                  cluster_std=[3.0, 0.5, 2.0], random_state=42)
-_register('syn_elongated_small', X, y,
+_register('syn_elongated_small',
+          lambda: make_blobs(n_samples=500, centers=3,
+                             cluster_std=[3.0, 0.5, 2.0], random_state=42),
           'C', 'elliptical', 'uniform', 'low', 'small', 'sklearn_gen', 2)
 
-X, y = make_blobs(n_samples=800, centers=4,
-                  cluster_std=[4.0, 0.3, 2.5, 1.0], random_state=42)
-_register('syn_elongated_medium', X, y,
+_register('syn_elongated_medium',
+          lambda: make_blobs(n_samples=800, centers=4,
+                             cluster_std=[4.0, 0.3, 2.5, 1.0], random_state=42),
           'C', 'elliptical', 'uniform', 'low', 'medium', 'sklearn_gen', 2)
 
-_try_uci('vehicle', 149,
-         'C', 'elliptical', 'uniform', 'mid', 'medium', 2)
-
-_try_uci('glass', 42,
-         'C', 'elliptical', 'uniform', 'low', 'small', 2)
-
-_try_adbench('ionosphere',
-             'AD', 'elliptical', 'uniform', 'mid', 'small', 2)
+_register_uci('vehicle', 149, 'C', 'elliptical', 'uniform', 'mid', 'medium', 2)
+_register_uci('glass', 42, 'C', 'elliptical', 'uniform', 'low', 'small', 2)
+_register_adbench('ionosphere', 'AD', 'elliptical', 'uniform', 'mid', 'small', 2)
 
 
 # ══════════════════════════════════════════════════════════════════════════
 # CONDITION 3 — Crescent / chain / irregular
-# From survey paper Table 3: iForest FAILS here, iNNE wins
 # ══════════════════════════════════════════════════════════════════════════
-print('\nCondition 3 — Crescent / irregular:')
 
-X, y = make_moons(n_samples=500, noise=0.05, random_state=42)
-_register('syn_moons_small', X, y,
+_register('syn_moons_small',
+          lambda: make_moons(n_samples=500, noise=0.05, random_state=42),
           'C', 'crescent', 'uniform', 'low', 'small', 'sklearn_gen', 3)
 
-X, y = make_moons(n_samples=1000, noise=0.10, random_state=42)
-_register('syn_moons_medium', X, y,
+_register('syn_moons_medium',
+          lambda: make_moons(n_samples=1000, noise=0.10, random_state=42),
           'C', 'crescent', 'uniform', 'low', 'medium', 'sklearn_gen', 3)
 
-# Moons as AD: inliers = moon shapes, outliers = random scatter
-X_in, _ = make_moons(n_samples=950, noise=0.05, random_state=42)
-rng = np.random.RandomState(0)
-X_out = rng.uniform(-2, 3, (50, 2))
-X_ad = np.vstack([X_in, X_out])
-y_ad = np.array([0]*950 + [1]*50)
-_register('syn_moons_ad', X_ad, y_ad,
+
+def _make_moons_ad():
+    X_in, _ = make_moons(n_samples=950, noise=0.05, random_state=42)
+    rng = np.random.RandomState(0)
+    X_out = rng.uniform(-2, 3, (50, 2))
+    return np.vstack([X_in, X_out]), np.array([0]*950 + [1]*50)
+
+
+_register('syn_moons_ad', _make_moons_ad,
           'AD', 'crescent', 'uniform', 'low', 'medium', 'sklearn_gen', 3)
 
-_try_adbench('vowels',
-             'AD', 'irregular', 'uniform', 'low', 'medium', 3)
-
-_try_adbench('lympho',
-             'AD', 'irregular', 'sparse',  'low', 'small',  3)
+_register_adbench('vowels', 'AD', 'irregular', 'uniform', 'low', 'medium', 3)
+_register_adbench('lympho', 'AD', 'irregular', 'sparse', 'low', 'small', 3)
 
 
 # ══════════════════════════════════════════════════════════════════════════
 # CONDITION 4 — Nested / concentric
-# Hardest for all hyperplane-based partitions
 # ══════════════════════════════════════════════════════════════════════════
-print('\nCondition 4 — Nested / concentric:')
 
-X, y = make_circles(n_samples=500, noise=0.05,
-                    factor=0.4, random_state=42)
-_register('syn_circles_small', X, y,
+_register('syn_circles_small',
+          lambda: make_circles(n_samples=500, noise=0.05, factor=0.4, random_state=42),
           'C', 'nested', 'uniform', 'low', 'small', 'sklearn_gen', 4)
 
-X, y = make_circles(n_samples=800, noise=0.08,
-                    factor=0.5, random_state=42)
-_register('syn_circles_medium', X, y,
+_register('syn_circles_medium',
+          lambda: make_circles(n_samples=800, noise=0.08, factor=0.5, random_state=42),
           'C', 'nested', 'uniform', 'low', 'medium', 'sklearn_gen', 4)
 
-X, y = make_gaussian_quantiles(n_samples=500, n_features=2,
-                               n_classes=3, random_state=42)
-_register('syn_gauss_quantiles', X, y,
+_register('syn_gauss_quantiles',
+          lambda: make_gaussian_quantiles(n_samples=500, n_features=2,
+                                         n_classes=3, random_state=42),
           'C', 'nested', 'uniform', 'low', 'small', 'sklearn_gen', 4)
 
 
 # ══════════════════════════════════════════════════════════════════════════
 # CONDITION 5 — Varying density
-# Key test: iNNE adapts ball size to density; iForest does not
 # ══════════════════════════════════════════════════════════════════════════
-print('\nCondition 5 — Varying density:')
 
-X1, _ = make_blobs(400, centers=[[0, 0]], cluster_std=0.3, random_state=42)
-X2, _ = make_blobs(100, centers=[[6, 6]], cluster_std=2.5, random_state=42)
-X = np.vstack([X1, X2])
-y = np.array([0]*400 + [1]*100)
-_register('syn_density_2d', X, y,
+def _make_density_2d():
+    X1, _ = make_blobs(400, centers=[[0, 0]], cluster_std=0.3, random_state=42)
+    X2, _ = make_blobs(100, centers=[[6, 6]], cluster_std=2.5, random_state=42)
+    return np.vstack([X1, X2]), np.array([0]*400 + [1]*100)
+
+
+def _make_density_3d():
+    X1, _ = make_blobs(300, centers=[[0, 0, 0]], cluster_std=0.2, random_state=42)
+    X2, _ = make_blobs(300, centers=[[5, 5, 5]], cluster_std=1.5, random_state=42)
+    X3, _ = make_blobs(400, centers=[[10, 0, 5]], cluster_std=3.0, random_state=42)
+    return np.vstack([X1, X2, X3]), np.array([0]*300 + [1]*300 + [2]*400)
+
+
+_register('syn_density_2d', _make_density_2d,
           'C', 'mixed', 'varying', 'low', 'small', 'sklearn_gen', 5)
 
-X1, _ = make_blobs(300, centers=[[0,0,0]], cluster_std=0.2, random_state=42)
-X2, _ = make_blobs(300, centers=[[5,5,5]], cluster_std=1.5, random_state=42)
-X3, _ = make_blobs(400, centers=[[10,0,5]], cluster_std=3.0, random_state=42)
-X = np.vstack([X1, X2, X3])
-y = np.array([0]*300 + [1]*300 + [2]*400)
-_register('syn_density_3d', X, y,
+_register('syn_density_3d', _make_density_3d,
           'C', 'mixed', 'varying', 'low', 'medium', 'sklearn_gen', 5)
 
-_try_uci('ecoli', 39,
-         'C', 'mixed', 'varying', 'low', 'small', 5)
-
-_try_uci('yeast', 110,
-         'C', 'mixed', 'varying', 'low', 'medium', 5)
-
-_try_adbench('thyroid',
-             'AD', 'mixed', 'varying', 'low', 'medium', 5)
-
-_try_adbench('cardio',
-             'AD', 'mixed', 'varying', 'mid', 'medium', 5)
-
-_try_adbench('waveform',
-             'C',  'mixed', 'varying', 'mid', 'medium', 5)
+_register_uci('ecoli', 39, 'C', 'mixed', 'varying', 'low', 'small', 5)
+_register_uci('yeast', 110, 'C', 'mixed', 'varying', 'low', 'medium', 5)
+_register_adbench('thyroid', 'AD', 'mixed', 'varying', 'low', 'medium', 5)
+_register_adbench('cardio', 'AD', 'mixed', 'varying', 'mid', 'medium', 5)
+_register_adbench('waveform', 'C', 'mixed', 'varying', 'mid', 'medium', 5)
 
 
 # ══════════════════════════════════════════════════════════════════════════
 # CONDITION 6 — High dimensionality
-# Voronoi degrades in high-dim; random hyperplane handles it better
 # ══════════════════════════════════════════════════════════════════════════
-print('\nCondition 6 — High-dimensional:')
 
-d = load_digits()
-_register('digits', d.data, d.target,
+_register('digits',
+          lambda: (load_digits().data, load_digits().target),
           'C', 'mixed', 'uniform', 'high', 'large', 'sklearn', 6)
 
-X, y = make_classification(n_samples=1000, n_features=50,
-    n_informative=20, n_redundant=10,
-    n_classes=3, n_clusters_per_class=1, random_state=42)
-_register('syn_highdim_50', X, y,
+_register('syn_highdim_50',
+          lambda: make_classification(n_samples=1000, n_features=50,
+              n_informative=20, n_redundant=10,
+              n_classes=3, n_clusters_per_class=1, random_state=42),
           'C', 'spherical', 'uniform', 'high', 'medium', 'sklearn_gen', 6)
 
-X, y = make_classification(n_samples=1000, n_features=100,
-    n_informative=30, n_redundant=20,
-    n_classes=4, n_clusters_per_class=1, random_state=42)
-_register('syn_highdim_100', X, y,
+_register('syn_highdim_100',
+          lambda: make_classification(n_samples=1000, n_features=100,
+              n_informative=30, n_redundant=20,
+              n_classes=4, n_clusters_per_class=1, random_state=42),
           'C', 'spherical', 'uniform', 'vhigh', 'medium', 'sklearn_gen', 6)
 
-_try_uci('dermatology', 33,
-         'C', 'mixed', 'uniform', 'high', 'small', 6)
-
-_try_adbench('satellite',
-             'AD', 'mixed', 'varying', 'high',  'large',  6)
-
-_try_adbench('musk',
-             'AD', 'mixed', 'uniform', 'vhigh', 'medium', 6)
-
-_try_adbench('optdigits',
-             'AD', 'mixed', 'uniform', 'high',  'medium', 6)
-
-_try_adbench('pendigits',
-             'AD', 'mixed', 'uniform', 'low',   'large',  6)
+_register_uci('dermatology', 33, 'C', 'mixed', 'uniform', 'high', 'small', 6)
+_register_adbench('satellite', 'AD', 'mixed', 'varying', 'high', 'large', 6)
+_register_adbench('musk', 'AD', 'mixed', 'uniform', 'vhigh', 'medium', 6)
+_register_adbench('optdigits', 'AD', 'mixed', 'uniform', 'high', 'medium', 6)
+_register_adbench('pendigits', 'AD', 'mixed', 'uniform', 'low', 'large', 6)
 
 
 # ══════════════════════════════════════════════════════════════════════════
 # CONDITION 7 — Large datasets (computational efficiency)
-# iForest is O(n log n) and cheapest; Voronoi most expensive
 # ══════════════════════════════════════════════════════════════════════════
-print('\nCondition 7 — Large (efficiency):')
 
-X, y = make_blobs(n_samples=10000, centers=5,
-                  cluster_std=1.5, random_state=42)
-y = (y == 0).astype(int)   # cluster 0 = anomaly, rest = normal
-_register('syn_large_10k', X, y,
+def _make_large_10k():
+    X, y = make_blobs(n_samples=10000, centers=5, cluster_std=1.5, random_state=42)
+    return X, (y == 0).astype(int)
+
+
+def _make_large_20k():
+    X, y = make_blobs(n_samples=20000, centers=5, cluster_std=1.5, random_state=42)
+    return X, (y == 0).astype(int)
+
+
+_register('syn_large_10k', _make_large_10k,
           'AD', 'spherical', 'uniform', 'low', 'large', 'sklearn_gen', 7)
 
-X, y = make_blobs(n_samples=20000, centers=5,
-                  cluster_std=1.5, random_state=42)
-y = (y == 0).astype(int)   # cluster 0 = anomaly, rest = normal
-_register('syn_large_20k', X, y,
+_register('syn_large_20k', _make_large_20k,
           'AD', 'spherical', 'uniform', 'low', 'large', 'sklearn_gen', 7)
 
-_try_uci('letter', 59,
-         'C', 'mixed', 'uniform', 'low', 'large', 7)
-
-_try_adbench('annthyroid',
-             'AD', 'mixed', 'varying', 'low', 'large', 7)
-
-_try_adbench('shuttle',
-             'AD', 'mixed', 'uniform', 'low', 'large', 7)
+_register_uci('letter', 59, 'C', 'mixed', 'uniform', 'low', 'large', 7)
+_register_adbench('annthyroid', 'AD', 'mixed', 'varying', 'low', 'large', 7)
+_register_adbench('shuttle', 'AD', 'mixed', 'uniform', 'low', 'large', 7)
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# SUMMARY
+# SUMMARY  (metadata only — no data is loaded)
 # ══════════════════════════════════════════════════════════════════════════
 
 def print_summary():
@@ -427,32 +434,37 @@ def print_summary():
     }
 
     print(f'\n{"="*72}')
-    print(f'  DATASET SUMMARY — {len(DATASETS)} loaded')
+    print(f'  DATASET REGISTRY  — {len(DATASETS)} registered  '
+          f'({len(DATASETS.loaded())} loaded)')
     print(f'{"="*72}')
 
     all_ok = True
     for cond, label in cond_names.items():
-        dsets = [d for d in DATASETS.values() if d['condition'] == cond]
-        n_c  = sum(1 for d in dsets if d['task'] == 'C')
-        n_ad = sum(1 for d in dsets if d['task'] == 'AD')
-        ok   = '✓' if len(dsets) >= 2 else '⚠ '
+        dsets = [v for v in DATASETS.values() if v['condition'] == cond]
+        n_c   = sum(1 for d in dsets if d['task'] == 'C')
+        n_ad  = sum(1 for d in dsets if d['task'] == 'AD')
+        ok    = chr(10003) if len(dsets) >= 2 else chr(9888)
         if len(dsets) < 2:
             all_ok = False
 
-        print(f'\n  {ok}  Cond {cond} — {label} '
-              f'({len(dsets)} | C:{n_c} AD:{n_ad})')
+        print(f'\n  {ok}  Cond {cond} — {label} ({len(dsets)} | C:{n_c} AD:{n_ad})')
         for d in sorted(dsets, key=lambda x: x['name']):
+            marker = '*' if d._data is not None else ' '
             tag = 'synth' if d['source'] == 'sklearn_gen' else 'real '
-            print(f'      [{tag}] {d["name"]:30s} '
-                  f'n={d["n"]:6d}  feat={d["features"]:4d}  '
-                  f'{d["dim_level"]:5s}  {d["size_level"]}')
+            if d._data is not None:
+                print(f'    {marker} [{tag}] {d["name"]:30s} '
+                      f'n={d["n"]:6d}  feat={d["features"]:4d}  '
+                      f'{d["dim_level"]:5s}  {d["size_level"]}')
+            else:
+                print(f'    {marker} [{tag}] {d["name"]:30s} '
+                      f'(not loaded)  {d["dim_level"]:5s}  {d["size_level"]}')
 
     print(f'\n{"="*72}')
-    print(f'  Tasks:   {dict(Counter(d["task"]      for d in DATASETS.values()))}')
-    print(f'  Shapes:  {dict(Counter(d["shape"]     for d in DATASETS.values()))}')
-    print(f'  Dims:    {dict(Counter(d["dim_level"] for d in DATASETS.values()))}')
-    print(f'  Sizes:   {dict(Counter(d["size_level"]for d in DATASETS.values()))}')
-    print(f'  Sources: {dict(Counter(d["source"]    for d in DATASETS.values()))}')
+    print(f'  Tasks:   {dict(Counter(d["task"]       for d in DATASETS.values()))}')
+    print(f'  Shapes:  {dict(Counter(d["shape"]      for d in DATASETS.values()))}')
+    print(f'  Dims:    {dict(Counter(d["dim_level"]  for d in DATASETS.values()))}')
+    print(f'  Sizes:   {dict(Counter(d["size_level"] for d in DATASETS.values()))}')
+    print(f'  Sources: {dict(Counter(d["source"]     for d in DATASETS.values()))}')
     status = 'ALL CONDITIONS MET' if all_ok else 'DOWNLOAD ADBENCH FILES TO COMPLETE'
     print(f'\n  {status}')
     print(f'{"="*72}\n')
