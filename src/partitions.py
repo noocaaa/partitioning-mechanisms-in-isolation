@@ -36,31 +36,34 @@ from sklearn.utils.validation import check_is_fitted
 from ikpykit.kernel._ik_anne import IK_ANNE
 from ikpykit.kernel._ik_inne import IK_INNE
 
+
 # ── Metadata ───────────────────────────────────────────────────────────────
 
 PARTITION_NAMES = {
-    'anne':      'Voronoi (aNNE)',
-    'inne':      'Hypersphere (iNNE)',
-    'iforest':   'Axis-parallel (iForest)',
-    'sciforest': 'Random hyperplane (SCiForest)',
+    "anne": "Voronoi (aNNE)",
+    "inne": "Hypersphere (iNNE)",
+    "inne-overlapping": "Hypersphere (iNNE) Overlapping",
+    "iforest": "Axis-parallel (iForest)",
+    "sciforest": "Random hyperplane (SCiForest)",
 }
 PARTITION_GEOMETRY = {
-    'anne':      'Voronoi cells — nearest centroid assignment',
-    'inne':      'Hyperspheres — radius = NN distance of centroid',
-    'iforest':   'Hyper-rectangles — axis-aligned recursive splits',
-    'sciforest': 'Oblique partitions — random linear combination splits',
+    "anne": "Voronoi cells — nearest centroid assignment",
+    "inne": "Hyperspheres — radius = NN distance of centroid",
+    "iforest": "Hyper-rectangles — axis-aligned recursive splits",
+    "sciforest": "Oblique partitions — random linear combination splits",
 }
 PARTITION_PAPERS = {
-    'anne':      'Qin et al. (AAAI 2019)',
-    'inne':      'Bandaragoda et al. (CIJ 2018)',
-    'iforest':   'Liu et al. (ICDM 2008)',
-    'sciforest': 'Liu et al. (ECML 2010)',
+    "anne": "Qin et al. (AAAI 2019)",
+    "inne": "Bandaragoda et al. (CIJ 2018)",
+    "iforest": "Liu et al. (ICDM 2008)",
+    "sciforest": "Liu et al. (ECML 2010)",
 }
 
 
 # ══════════════════════════════════════════════════════════════════════════
 # UTILITIES
 # ══════════════════════════════════════════════════════════════════════════
+
 
 def _ik_sim(phi_X, phi_Y, n_est):
     """κ(X,Y) = (1/t) Φ(X) Φ(Y)ᵀ"""
@@ -85,46 +88,48 @@ def _idk_scalar(kme_i, kme_j, n_est, normalize=True):
 
 # ── Fixed-width leaf mapper (needed for iforest + sciforest) ──────────────
 
+
 class _FixedLeafMapper:
     """
     Learns the leaf-ID → column mapping from training data,
     then applies the SAME fixed-width mapping to any new data.
     Ensures phi_train and phi_test always have the same number of columns.
     """
+
     def fit(self, leaves_train):
         n, n_est = leaves_train.shape
-        self._maps    = []
+        self._maps = []
         self._offsets = []
         total = 0
         for t in range(n_est):
-            uids    = np.unique(leaves_train[:, t])
+            uids = np.unique(leaves_train[:, t])
             mapping = {int(uid): i for i, uid in enumerate(uids)}
             self._maps.append(mapping)
             self._offsets.append(total)
             total += len(uids)
         self._total_cells = total
-        self._n_est       = n_est
+        self._n_est = n_est
         return self
 
     def transform(self, leaves_matrix):
         n_samples = leaves_matrix.shape[0]
         rows, cols, data = [], [], []
         for t in range(self._n_est):
-            m   = self._maps[t]
+            m = self._maps[t]
             off = self._offsets[t]
             for i, lid in enumerate(leaves_matrix[:, t]):
                 cols.append(m.get(int(lid), 0) + off)
                 rows.append(i)
                 data.append(1.0)
         return sparse.csr_matrix(
-            (data, (rows, cols)),
-            shape=(n_samples, self._total_cells)
+            (data, (rows, cols)), shape=(n_samples, self._total_cells)
         )
 
 
 # ══════════════════════════════════════════════════════════════════════════
 # BASE PARTITION CLASS
 # ══════════════════════════════════════════════════════════════════════════
+
 
 class _BasePartition(TransformerMixin, BaseEstimator):
     """
@@ -134,7 +139,7 @@ class _BasePartition(TransformerMixin, BaseEstimator):
 
     def __init__(self, n_estimators=200, max_samples=16, random_state=42):
         self.n_estimators = n_estimators
-        self.max_samples  = max_samples
+        self.max_samples = max_samples
         self.random_state = random_state
 
     def fit(self, X, y=None):
@@ -145,7 +150,7 @@ class _BasePartition(TransformerMixin, BaseEstimator):
 
     def transform(self, X):
         """Sparse binary feature map Φ(X) — same width as training."""
-        check_is_fitted(self, 'is_fitted_')
+        check_is_fitted(self, "is_fitted_")
         return self._transform_partition(check_array(X).astype(np.float32))
 
     # ── IK ─────────────────────────────────────────────────────────────────
@@ -170,7 +175,7 @@ class _BasePartition(TransformerMixin, BaseEstimator):
         Returns (n, n) matrix in [0,1].
         """
         phi_X = self.transform(X)
-        K     = _ik_sim(phi_X, phi_X, self.n_estimators)
+        K = _ik_sim(phi_X, phi_X, self.n_estimators)
         if normalize:
             d = np.sqrt(np.diag(K))
             d[d == 0] = 1.0
@@ -186,8 +191,7 @@ class _BasePartition(TransformerMixin, BaseEstimator):
         """
         phi_i = self.transform(Di)
         phi_j = self.transform(Dj)
-        return _idk_scalar(_kme(phi_i), _kme(phi_j),
-                           self.n_estimators, normalize)
+        return _idk_scalar(_kme(phi_i), _kme(phi_j), self.n_estimators, normalize)
 
     def idk_scores(self, X, normalize=True):
         """
@@ -196,37 +200,42 @@ class _BasePartition(TransformerMixin, BaseEstimator):
         Higher score → more anomalous.
         Returns (n,) array in [0,1].
         """
-        phi_X  = self.transform(X)
-        g_kme  = _kme(phi_X)   # global KME = mean over all test points
+        phi_X = self.transform(X)
+        g_kme = _kme(phi_X)  # global KME = mean over all test points
         scores = np.zeros(len(X))
         for i in range(len(X)):
             phi_i = np.asarray(phi_X[i].todense()).ravel()
-            scores[i] = 1.0 - _idk_scalar(phi_i, g_kme,
-                                           self.n_estimators, normalize)
+            scores[i] = 1.0 - _idk_scalar(phi_i, g_kme, self.n_estimators, normalize)
         return np.clip(scores, 0, 1)
 
-    def similarity(self, X, Y=None, kernel='ik'):
+    def similarity(self, X, Y=None, kernel="ik"):
         """Convenience wrapper. kernel='ik' or 'idk'."""
-        if kernel == 'ik':
+        if kernel == "ik":
             return self.similarity_ik(X, Y)
         return self.similarity_idk(X)
 
-    def _fit_partition(self, X):       raise NotImplementedError
-    def _transform_partition(self, X): raise NotImplementedError
+    def _fit_partition(self, X):
+        raise NotImplementedError
+
+    def _transform_partition(self, X):
+        raise NotImplementedError
 
 
 # ══════════════════════════════════════════════════════════════════════════
 # PARTITION 1 — VORONOI (aNNE)
 # ══════════════════════════════════════════════════════════════════════════
 
+
 class VoronoiPartition(_BasePartition):
     """Voronoi (aNNE) — ikpykit IK_ANNE — Section 3.2.3."""
+
     def _fit_partition(self, X):
         self._model = IK_ANNE(
             n_estimators=self.n_estimators,
             max_samples=self.max_samples,
             random_state=self.random_state,
         ).fit(X)
+
     def _transform_partition(self, X):
         return self._model.transform(X)
 
@@ -235,14 +244,32 @@ class VoronoiPartition(_BasePartition):
 # PARTITION 2 — HYPERSPHERE (iNNE)
 # ══════════════════════════════════════════════════════════════════════════
 
+
 class HyperspherePartition(_BasePartition):
     """Hypersphere (iNNE) — ikpykit IK_INNE — Section 3.2.2."""
+
     def _fit_partition(self, X):
         self._model = IK_INNE(
             n_estimators=self.n_estimators,
             max_samples=self.max_samples,
             random_state=self.random_state,
         ).fit(X)
+
+    def _transform_partition(self, X):
+        return self._model.transform(X)
+
+
+class HyperspherePartitionOverlapping(_BasePartition):
+    """Hypersphere (iNNE) — ikpykit IK_INNE — Section 3.2.2."""
+
+    def _fit_partition(self, X):
+        self._model = IK_INNE(
+            n_estimators=self.n_estimators,
+            max_samples=self.max_samples,
+            random_state=self.random_state,
+            overlapping=True,
+        ).fit(X)
+
     def _transform_partition(self, X):
         return self._model.transform(X)
 
@@ -251,8 +278,10 @@ class HyperspherePartition(_BasePartition):
 # PARTITION 3 — AXIS-PARALLEL (iForest)
 # ══════════════════════════════════════════════════════════════════════════
 
+
 class AxisParallelPartition(_BasePartition):
     """Axis-parallel (iForest) — sklearn IsolationForest — Section 3.1."""
+
     def _fit_partition(self, X):
         self._model = IsolationForest(
             n_estimators=self.n_estimators,
@@ -260,15 +289,15 @@ class AxisParallelPartition(_BasePartition):
             random_state=self.random_state,
         ).fit(X)
         # Learn fixed leaf mapping from training data
-        leaves_tr    = np.column_stack([
-            t.apply(X, check_input=False) for t in self._model.estimators_
-        ])
+        leaves_tr = np.column_stack(
+            [t.apply(X, check_input=False) for t in self._model.estimators_]
+        )
         self._mapper = _FixedLeafMapper().fit(leaves_tr)
 
     def _transform_partition(self, X):
-        leaves = np.column_stack([
-            t.apply(X, check_input=False) for t in self._model.estimators_
-        ])
+        leaves = np.column_stack(
+            [t.apply(X, check_input=False) for t in self._model.estimators_]
+        )
         return self._mapper.transform(leaves)
 
 
@@ -276,34 +305,42 @@ class AxisParallelPartition(_BasePartition):
 # PARTITION 4 — RANDOM HYPERPLANE (SCiForest) — pure numpy
 # ══════════════════════════════════════════════════════════════════════════
 
+
 class _SCiTree:
     """Single oblique-split tree (Liu et al. ECML 2010)."""
+
     def __init__(self, max_depth, n_dims, rng):
         self.max_depth = max_depth
-        self.n_dims    = n_dims
-        self.rng       = rng
+        self.n_dims = n_dims
+        self.rng = rng
 
     def _build(self, X, depth=0):
         n, d = X.shape
         if depth >= self.max_depth or n <= 1:
-            return {'leaf': True, 'id': None}
+            return {"leaf": True, "id": None}
         feat = self.rng.choice(d, min(self.n_dims, d), replace=False)
         coef = self.rng.randn(len(feat))
         proj = X[:, feat] @ coef
         lo, hi = proj.min(), proj.max()
         if lo >= hi:
-            return {'leaf': True, 'id': None}
+            return {"leaf": True, "id": None}
         split = self.rng.uniform(lo, hi)
-        mask  = proj <= split
-        return {'leaf': False, 'feat': feat, 'coef': coef, 'split': split,
-                'left':  self._build(X[mask],  depth + 1),
-                'right': self._build(X[~mask], depth + 1)}
+        mask = proj <= split
+        return {
+            "leaf": False,
+            "feat": feat,
+            "coef": coef,
+            "split": split,
+            "left": self._build(X[mask], depth + 1),
+            "right": self._build(X[~mask], depth + 1),
+        }
 
     def _ids(self, node, cid=0):
-        if node['leaf']:
-            node['id'] = cid; return cid + 1
-        cid = self._ids(node['left'],  cid)
-        cid = self._ids(node['right'], cid)
+        if node["leaf"]:
+            node["id"] = cid
+            return cid + 1
+        cid = self._ids(node["left"], cid)
+        cid = self._ids(node["right"], cid)
         return cid
 
     def fit(self, X):
@@ -315,32 +352,32 @@ class _SCiTree:
         ids = np.zeros(len(X), dtype=np.int32)
         for i, x in enumerate(X):
             n = self._tree
-            while not n['leaf']:
-                n = n['left'] if x[n['feat']] @ n['coef'] <= n['split'] else n['right']
-            ids[i] = n['id']
+            while not n["leaf"]:
+                n = n["left"] if x[n["feat"]] @ n["coef"] <= n["split"] else n["right"]
+            ids[i] = n["id"]
         return ids
 
 
 class RandomHyperplanePartition(_BasePartition):
     """Random hyperplane (SCiForest) — pure numpy — Section 3.2.1."""
-    def __init__(self, n_estimators=200, max_samples=16,
-                 random_state=42, n_dims=2, max_depth=8):
+
+    def __init__(
+        self, n_estimators=200, max_samples=16, random_state=42, n_dims=2, max_depth=8
+    ):
         super().__init__(n_estimators, max_samples, random_state)
-        self.n_dims    = n_dims
+        self.n_dims = n_dims
         self.max_depth = max_depth
 
     def _fit_partition(self, X):
-        rng  = check_random_state(self.random_state)
-        n    = X.shape[0]
+        rng = check_random_state(self.random_state)
+        n = X.shape[0]
         subs = min(self.max_samples, n)
         self._trees = []
         for _ in range(self.n_estimators):
-            idx  = rng.choice(n, subs, replace=False)
-            self._trees.append(
-                _SCiTree(self.max_depth, self.n_dims, rng).fit(X[idx])
-            )
+            idx = rng.choice(n, subs, replace=False)
+            self._trees.append(_SCiTree(self.max_depth, self.n_dims, rng).fit(X[idx]))
         # Learn fixed leaf mapping from training data
-        leaves_tr    = np.column_stack([t.apply(X) for t in self._trees])
+        leaves_tr = np.column_stack([t.apply(X) for t in self._trees])
         self._mapper = _FixedLeafMapper().fit(leaves_tr)
 
     def _transform_partition(self, X):
@@ -353,15 +390,17 @@ class RandomHyperplanePartition(_BasePartition):
 # ══════════════════════════════════════════════════════════════════════════
 
 _CLASSES = {
-    'anne':      VoronoiPartition,
-    'inne':      HyperspherePartition,
-    'iforest':   AxisParallelPartition,
-    'sciforest': RandomHyperplanePartition,
+    "anne": VoronoiPartition,
+    "inne": HyperspherePartition,
+    "inne-overlapping": HyperspherePartitionOverlapping,
+    "iforest": AxisParallelPartition,
+    "sciforest": RandomHyperplanePartition,
 }
 
 
-def get_partition(method, kernel='ik', n_estimators=200,
-                  max_samples=16, random_state=42, **kwargs):
+def get_partition(
+    method, kernel="ik", n_estimators=200, max_samples=16, random_state=42, **kwargs
+):
     """
     Return an unfitted partition object.
 
@@ -397,10 +436,10 @@ def get_partition(method, kernel='ik', n_estimators=200,
 # SANITY CHECK — python src/partitions.py
 # ══════════════════════════════════════════════════════════════════════════
 
-if __name__ == '__main__':
-    print('=' * 66)
-    print('  IK Partitioning Study — src/partitions.py sanity check')
-    print('=' * 66)
+if __name__ == "__main__":
+    print("=" * 66)
+    print("  IK Partitioning Study — src/partitions.py sanity check")
+    print("=" * 66)
     np.random.seed(42)
     X_tr = np.random.rand(300, 10).astype(np.float32)
     X_te = np.random.rand(100, 10).astype(np.float32)
@@ -408,24 +447,31 @@ if __name__ == '__main__':
     N_EST, N_SUB = 50, 16
     all_ok = True
 
-    for method in ['anne', 'inne', 'iforest', 'sciforest']:
+    for method in ["anne", "inne", "iforest", "sciforest"]:
         try:
-            part = get_partition(method, n_estimators=N_EST,
-                                 max_samples=N_SUB, random_state=42)
-            t0   = time.perf_counter()
+            part = get_partition(
+                method, n_estimators=N_EST, max_samples=N_SUB, random_state=42
+            )
+            t0 = time.perf_counter()
             part.fit(X_tr)
             fit_t = time.perf_counter() - t0
 
-            K_ik   = part.similarity_ik(X_te)
-            K_idk  = part.similarity_idk(X_te)
-            idk_s  = part.idk_between(D1, D2)
+            K_ik = part.similarity_ik(X_te)
+            K_idk = part.similarity_idk(X_te)
+            idk_s = part.idk_between(D1, D2)
             scores = part.idk_scores(X_te)
 
-            ok = (K_ik.min()  >= 0 and K_ik.max()  <= 1.001 and
-                  K_idk.min() >= 0 and K_idk.max() <= 1.001 and
-                  0 <= idk_s  <= 1.001 and
-                  scores.min() >= 0   and scores.max() <= 1.001)
-            if not ok: all_ok = False
+            ok = (
+                K_ik.min() >= 0
+                and K_ik.max() <= 1.001
+                and K_idk.min() >= 0
+                and K_idk.max() <= 1.001
+                and 0 <= idk_s <= 1.001
+                and scores.min() >= 0
+                and scores.max() <= 1.001
+            )
+            if not ok:
+                all_ok = False
 
             print(f"\n  {PARTITION_NAMES[method]}")
             print(f"    paper       : {PARTITION_PAPERS[method]}")
@@ -438,20 +484,21 @@ if __name__ == '__main__':
 
         except Exception as e:
             import traceback
+
             print(f"\n  {method}: FAILED")
             traceback.print_exc()
             all_ok = False
 
     print()
-    print('=' * 66)
+    print("=" * 66)
     print(f"  {'ALL 4 × IK + IDK OK ✓' if all_ok else 'SOME FAILED — see above'}")
     print()
-    print('  Usage:')
-    print('    from src.partitions import get_partition')
+    print("  Usage:")
+    print("    from src.partitions import get_partition")
     print("    part = get_partition('anne', n_estimators=200, max_samples=16)")
-    print('    part.fit(X_train)')
-    print('    K_ik   = part.similarity_ik(X_test)    # IK  kernel matrix')
-    print('    K_idk  = part.similarity_idk(X_test)   # IDK kernel matrix')
-    print('    sim    = part.idk_between(D1, D2)       # group similarity')
-    print('    scores = part.idk_scores(X_test)        # anomaly scores')
-    print('=' * 66)
+    print("    part.fit(X_train)")
+    print("    K_ik   = part.similarity_ik(X_test)    # IK  kernel matrix")
+    print("    K_idk  = part.similarity_idk(X_test)   # IDK kernel matrix")
+    print("    sim    = part.idk_between(D1, D2)       # group similarity")
+    print("    scores = part.idk_scores(X_test)        # anomaly scores")
+    print("=" * 66)

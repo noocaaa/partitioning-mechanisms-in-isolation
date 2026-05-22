@@ -3,11 +3,13 @@
 Comparative study of four partitioning mechanisms used in **IsoKernel (IK)** and **Isolation Distributional Kernel (IDK)** methods for clustering and anomaly detection.
 
 ---
+
 ## Overview
 
 This repository evaluates four partitioning strategies across **41 datasets** organized into **7 experimental conditions** (e.g., spherical, elongated, crescent, nested, varying density, high-dimensional, large). Each condition is designed to reveal strengths and weaknesses of specific partitioning mechanisms based on prior literature (Cao et al. 2025).
 
 **Tasks covered:**
+
 - **Clustering (C)** — 23 datasets, evaluated with ARI and NMI
 - **Anomaly Detection (AD)** — 18 datasets, evaluated with AUC
 
@@ -15,19 +17,21 @@ This repository evaluates four partitioning strategies across **41 datasets** or
 
 ## Partitioning Mechanisms
 
-| Short name | Full name | Geometry |
-|---|---|---|
-| `anne` | Voronoi (aNNE) | Voronoi cells — nearest centroid assignment |
-| `inne` | Hypersphere (iNNE) | Hyperspheres — radius = NN distance of centroid |
-| `iforest` | Axis-parallel (iForest) | Hyper-rectangles — axis-aligned recursive splits |
+| Short name  | Full name                     | Geometry                                              |
+| ----------- | ----------------------------- | ----------------------------------------------------- |
+| `anne`      | Voronoi (aNNE)                | Voronoi cells — nearest centroid assignment           |
+| `inne`      | Hypersphere (iNNE)            | Hyperspheres — radius = NN distance of centroid       |
+| `iforest`   | Axis-parallel (iForest)       | Hyper-rectangles — axis-aligned recursive splits      |
 | `sciforest` | Random hyperplane (SCiForest) | Oblique partitions — random linear combination splits |
 
 ---
+
 ## Datasets
 
 All datasets are loaded centrally via `data/datasets.py` into a global dict `DATASETS`.
 
 **Sources:**
+
 - `sklearn` — Built-in datasets (iris, wine, digits, breast_cancer)
 - `sklearn_gen` — Synthetic generators (blobs, moons, circles, etc.)
 - `UCI` — Fetched via `ucimlrepo` package, requires internet
@@ -36,6 +40,7 @@ All datasets are loaded centrally via `data/datasets.py` into a global dict `DAT
 **First-run behavior:** When `data/datasets.py` runs for the first time, missing ADBench `.npz` files are downloaded automatically. If downloads fail, datasets are skipped gracefully.
 
 ---
+
 ## Installation
 
 ```bash
@@ -45,6 +50,7 @@ pip install -r requirements.txt
 > **Note:** The ADBench auto-downloader temporarily disables SSL hostname verification to avoid certificate errors on some networks.
 
 ---
+
 ## Usage
 
 ### Run experiments
@@ -63,6 +69,10 @@ python experiments/run_clustering.py --fast
 # Run single dataset or partition
 python experiments/run_anomaly.py --dataset thyroid --partition anne
 python experiments/run_clustering.py --dataset iris --partition inne
+
+# Run multiple partitions in one go
+python experiments/run_anomaly.py --dataset thyroid --partition anne inne
+python experiments/run_clustering.py --dataset iris --partition anne,iforest
 ```
 
 ### Run dashboards
