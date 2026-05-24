@@ -1,4 +1,4 @@
-git+https://github.com/akmere/ikpykit#egg=ikpykit
+ikpykit>=0.2.4
 scikit-learn 
 pandas 
 numpy 

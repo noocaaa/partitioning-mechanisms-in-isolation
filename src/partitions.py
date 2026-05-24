@@ -1,12 +1,13 @@
 """
 src/partitions.py  —  IK Partitioning Study
 =============================================
-All 4 partitioning mechanisms × 2 kernel types (IK and IDK).
+All partitioning mechanisms × 2 kernel types (IK and IDK).
 No C++ compiler or isotree required.
 
 PARTITIONS (Cao et al. 2025, Table 1):
   anne       Voronoi (aNNE)             Section 3.2.3
   inne       Hypersphere (iNNE)         Section 3.2.2
+  inne-overlapping  Hypersphere (iNNE) Overlapping
   iforest    Axis-parallel (iForest)    Section 3.1
   sciforest  Random hyperplane          Section 3.2.1
 
@@ -34,7 +35,11 @@ from sklearn.ensemble import IsolationForest
 from sklearn.utils import check_array, check_random_state
 from sklearn.utils.validation import check_is_fitted
 from ikpykit.kernel._ik_anne import IK_ANNE
-from ikpykit.kernel._ik_inne import IK_INNE
+
+try:
+    from ._ik_inne import IK_INNE
+except ImportError:
+    from _ik_inne import IK_INNE
 
 
 # ── Metadata ───────────────────────────────────────────────────────────────
@@ -46,12 +51,14 @@ PARTITION_NAMES = {
     "iforest": "Axis-parallel (iForest)",
     "sciforest": "Random hyperplane (SCiForest)",
 }
+
 PARTITION_GEOMETRY = {
     "anne": "Voronoi cells — nearest centroid assignment",
     "inne": "Hyperspheres — radius = NN distance of centroid",
     "iforest": "Hyper-rectangles — axis-aligned recursive splits",
     "sciforest": "Oblique partitions — random linear combination splits",
 }
+
 PARTITION_PAPERS = {
     "anne": "Qin et al. (AAAI 2019)",
     "inne": "Bandaragoda et al. (CIJ 2018)",
@@ -63,7 +70,6 @@ PARTITION_PAPERS = {
 # ══════════════════════════════════════════════════════════════════════════
 # UTILITIES
 # ══════════════════════════════════════════════════════════════════════════
-
 
 def _ik_sim(phi_X, phi_Y, n_est):
     """κ(X,Y) = (1/t) Φ(X) Φ(Y)ᵀ"""
@@ -87,7 +93,6 @@ def _idk_scalar(kme_i, kme_j, n_est, normalize=True):
 
 
 # ── Fixed-width leaf mapper (needed for iforest + sciforest) ──────────────
-
 
 class _FixedLeafMapper:
     """
@@ -130,10 +135,9 @@ class _FixedLeafMapper:
 # BASE PARTITION CLASS
 # ══════════════════════════════════════════════════════════════════════════
 
-
 class _BasePartition(TransformerMixin, BaseEstimator):
     """
-    Base class for all 4 partitions.
+    Base class for all partitions.
     Provides IK and IDK similarity methods after fit.
     """
 
@@ -225,7 +229,6 @@ class _BasePartition(TransformerMixin, BaseEstimator):
 # PARTITION 1 — VORONOI (aNNE)
 # ══════════════════════════════════════════════════════════════════════════
 
-
 class VoronoiPartition(_BasePartition):
     """Voronoi (aNNE) — ikpykit IK_ANNE — Section 3.2.3."""
 
@@ -244,7 +247,6 @@ class VoronoiPartition(_BasePartition):
 # PARTITION 2 — HYPERSPHERE (iNNE)
 # ══════════════════════════════════════════════════════════════════════════
 
-
 class HyperspherePartition(_BasePartition):
     """Hypersphere (iNNE) — ikpykit IK_INNE — Section 3.2.2."""
 
@@ -260,7 +262,7 @@ class HyperspherePartition(_BasePartition):
 
 
 class HyperspherePartitionOverlapping(_BasePartition):
-    """Hypersphere (iNNE) — ikpykit IK_INNE — Section 3.2.2."""
+    """Hypersphere (iNNE) with overlapping regions — Section 3.2.2."""
 
     def _fit_partition(self, X):
         self._model = IK_INNE(
@@ -277,7 +279,6 @@ class HyperspherePartitionOverlapping(_BasePartition):
 # ══════════════════════════════════════════════════════════════════════════
 # PARTITION 3 — AXIS-PARALLEL (iForest)
 # ══════════════════════════════════════════════════════════════════════════
-
 
 class AxisParallelPartition(_BasePartition):
     """Axis-parallel (iForest) — sklearn IsolationForest — Section 3.1."""
@@ -304,7 +305,6 @@ class AxisParallelPartition(_BasePartition):
 # ══════════════════════════════════════════════════════════════════════════
 # PARTITION 4 — RANDOM HYPERPLANE (SCiForest) — pure numpy
 # ══════════════════════════════════════════════════════════════════════════
-
 
 class _SCiTree:
     """Single oblique-split tree (Liu et al. ECML 2010)."""
@@ -406,10 +406,10 @@ def get_partition(
 
     Parameters
     ----------
-    method       : 'anne' | 'inne' | 'iforest' | 'sciforest'
+    method       : 'anne' | 'inne' | 'inne-overlapping' | 'iforest' | 'sciforest'
     kernel       : 'ik' | 'idk'  (informational — both always available)
     n_estimators : t  in the paper (default 200)
-    max_samples  : ψ  in the paper (default 16)
+    max_samples  : psi  in the paper (default 16)
     random_state : seed (default 42)
     **kwargs     : e.g. n_dims=3 for sciforest
 
@@ -447,7 +447,7 @@ if __name__ == "__main__":
     N_EST, N_SUB = 50, 16
     all_ok = True
 
-    for method in ["anne", "inne", "iforest", "sciforest"]:
+    for method in ["anne", "inne", "inne-overlapping", "iforest", "sciforest"]:
         try:
             part = get_partition(
                 method, n_estimators=N_EST, max_samples=N_SUB, random_state=42
@@ -474,7 +474,7 @@ if __name__ == "__main__":
                 all_ok = False
 
             print(f"\n  {PARTITION_NAMES[method]}")
-            print(f"    paper       : {PARTITION_PAPERS[method]}")
+            print(f"    paper       : {PARTITION_PAPERS.get(method, 'N/A')}")
             print(f"    fit time    : {fit_t:.4f}s")
             print(f"    IK  K range : [{K_ik.min():.3f}, {K_ik.max():.3f}]")
             print(f"    IDK K range : [{K_idk.min():.3f}, {K_idk.max():.3f}]")
@@ -491,7 +491,7 @@ if __name__ == "__main__":
 
     print()
     print("=" * 66)
-    print(f"  {'ALL 4 × IK + IDK OK ✓' if all_ok else 'SOME FAILED — see above'}")
+    print(f"  {'ALL 5 × IK + IDK OK ✓' if all_ok else 'SOME FAILED — see above'}")
     print()
     print("  Usage:")
     print("    from src.partitions import get_partition")

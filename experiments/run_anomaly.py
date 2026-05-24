@@ -16,6 +16,7 @@ Usage:
 
 import os, sys, time, argparse, warnings, traceback
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 import pandas as pd
@@ -71,6 +72,14 @@ RESULT_COLUMNS = [
     "max_samples",
     "n_runs",
 ]
+
+
+def _run_anomaly_task(task):
+    """Worker: run one (dataset, partition, kernel) combination."""
+    ds_name, partition, kernel, n_est, max_samples = task
+    from data.datasets import DATASETS
+    ds = DATASETS[ds_name]
+    return run_one(ds, partition, kernel, n_est, max_samples)
 
 
 def _get_auc_consistent_masks(y):
@@ -290,11 +299,16 @@ def main():
     n_est = 50 if args.fast else N_ESTIMATORS
     os.makedirs(OUT_DIR, exist_ok=True)
 
-    ad_datasets = [
-        ds
-        for ds in DATASETS.values()
-        if ds["task"] == "AD" and (args.dataset is None or ds["name"] == args.dataset)
-    ]
+    ad_datasets = []
+    for ds in DATASETS.values():
+        if ds["task"] != "AD" or (args.dataset is not None and ds["name"] != args.dataset):
+            continue
+        try:
+            _ = ds["X"]  # trigger lazy load once
+            ad_datasets.append(ds)
+        except Exception as e:
+            print(f"  SKIP {ds['name']:28s} (load error: {e})")
+
     if args.partition:
         tokens = [
             p.strip() for arg in args.partition for p in arg.split(",") if p.strip()
@@ -315,7 +329,7 @@ def main():
     print(f"  Datasets   : {len(ad_datasets)}")
     print(f"  Partitions : {partitions}")
     print(f"  Kernels    : {KERNELS}")
-    print(f"  n_est      : {n_est}   ψ : {MAX_SAMPLES}")
+    print(f"  n_est      : {n_est}   psi : {MAX_SAMPLES}")
     print(f"  Runs each  : {N_RUNS}")
     print(f"  Output     : {OUT_DIR}")
     print("=" * 68)
@@ -326,6 +340,7 @@ def main():
     done = len(results)
     skipped = 0
 
+    tasks = []
     for ds in ad_datasets:
         for partition in partitions:
             for kernel in KERNELS:
@@ -333,32 +348,36 @@ def main():
                 if key in completed:
                     skipped += 1
                     continue
-                done += 1
-                tag = f"[{done:3d}/{total}] {ds['name']:28s} {partition:12s} {kernel}"
-                print(f"  {tag}", end="  ", flush=True)
-                try:
-                    t0 = time.perf_counter()
-                    row = run_one(ds, partition, kernel, n_est, MAX_SAMPLES)
-                    elapsed = time.perf_counter() - t0
-                    results.append(row)
-                    _append_row(row, OUT_PATH)
-                    print(
-                        f"AUC={row['auc_mean']:.3f}±{row['auc_std']:.3f}  "
-                        f"φ={row['phi_width']}  "
-                        f"ones/pt/est={row['phi_ones_per_point_per_estimator']:.2f} "
-                        f"(n={row['phi_ones_per_point_per_estimator_normal']:.2f}, "
-                        f"a={row['phi_ones_per_point_per_estimator_anomaly']:.2f})  "
-                        f"t={elapsed:.1f}s"
-                    )
-                except Exception as e:
-                    print(f"FAILED — {e}")
-                    traceback.print_exc()
+                tasks.append((ds["name"], partition, kernel, n_est, MAX_SAMPLES))
+
+    total = len(tasks) + skipped
+    done = skipped
+    workers = max(1, min(8, len(tasks)))  # cap threads, but always at least 1
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(_run_anomaly_task, t): t for t in tasks}
+        for future in as_completed(futures):
+            done += 1
+            row = future.result()
+            if row is None:
+                continue
+            results.append(row)
+            _append_row(row, OUT_PATH)
+            print(
+                f"  [{done:3d}/{total}] {row['dataset']:28s} {row['partition']:12s} {row['kernel']}  "
+                f"AUC={row['auc_mean']:.3f}+/-{row['auc_std']:.3f}  "
+                f"phi={row['phi_width']}  "
+                f"ones/pt/est={row['phi_ones_per_point_per_estimator']:.2f} "
+                f"(n={row['phi_ones_per_point_per_estimator_normal']:.2f}, "
+                f"a={row['phi_ones_per_point_per_estimator_anomaly']:.2f})  "
+                f"t={row['total_time_s']:.1f}s"
+            )
 
     if skipped:
         print(f"\n  Skipped {skipped} already-completed combinations.")
 
     df = pd.DataFrame(results)
-    print(f"\n  Saved {len(df)} rows → {OUT_PATH}")
+    print(f"\n  Saved {len(df)} rows -> {OUT_PATH}")
 
     if len(df) == 0:
         return

@@ -1,7 +1,7 @@
 """
 experiments/run_clustering.py
 ==============================
-Clustering experiments: 5 partitions × IK + IDK × all C datasets.
+Clustering experiments: 5 partitions x IK + IDK x all C datasets.
 
 Saves to: results/clustering/ari_results.csv
 
@@ -16,6 +16,7 @@ Usage:
 
 import os, sys, time, argparse, warnings, traceback
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 import pandas as pd
@@ -72,6 +73,14 @@ RESULT_COLUMNS = [
     "max_samples",
     "n_runs",
 ]
+
+
+def _run_clustering_task(task):
+    """Worker: run one (dataset, partition, kernel) combination."""
+    ds_name, partition, kernel, n_est, max_samples = task
+    from data.datasets import DATASETS
+    ds = DATASETS[ds_name]
+    return run_one(ds, partition, kernel, n_est, max_samples)
 
 
 def _load_existing(path, n_estimators):
@@ -265,11 +274,16 @@ def main():
     n_est = 50 if args.fast else N_ESTIMATORS
     os.makedirs(OUT_DIR, exist_ok=True)
 
-    cl_datasets = [
-        ds
-        for ds in DATASETS.values()
-        if ds["task"] == "C" and (args.dataset is None or ds["name"] == args.dataset)
-    ]
+    cl_datasets = []
+    for ds in DATASETS.values():
+        if ds["task"] != "C" or (args.dataset is not None and ds["name"] != args.dataset):
+            continue
+        try:
+            _ = ds["X"]  # trigger lazy load once
+            cl_datasets.append(ds)
+        except Exception as e:
+            print(f"  SKIP {ds['name']:28s} (load error: {e})")
+
     if args.partition:
         tokens = [
             p.strip() for arg in args.partition for p in arg.split(",") if p.strip()
@@ -290,7 +304,7 @@ def main():
     print(f"  Datasets   : {len(cl_datasets)}")
     print(f"  Partitions : {partitions}")
     print(f"  Kernels    : {KERNELS}")
-    print(f"  n_est      : {n_est}   ψ : {MAX_SAMPLES}")
+    print(f"  n_est      : {n_est}   psi : {MAX_SAMPLES}")
     print(f"  Runs each  : {N_RUNS}")
     print(f"  Output     : {OUT_DIR}")
     print("=" * 68)
@@ -301,6 +315,7 @@ def main():
     done = len(results)
     skipped = 0
 
+    tasks = []
     for ds in cl_datasets:
         for partition in partitions:
             for kernel in KERNELS:
@@ -308,35 +323,39 @@ def main():
                 if key in completed:
                     skipped += 1
                     continue
-                done += 1
-                tag = f"[{done:3d}/{total}] {ds['name']:28s} {partition:12s} {kernel}"
-                print(f"  {tag}", end="  ", flush=True)
-                try:
-                    t0 = time.perf_counter()
-                    row = run_one(ds, partition, kernel, n_est, MAX_SAMPLES)
-                    elapsed = time.perf_counter() - t0
-                    results.append(row)
-                    _append_row(row, OUT_PATH)
-                    print(
-                        f"ARI={row['ari_mean']:.3f}±{row['ari_std']:.3f}  "
-                        f"NMI={row['nmi_mean']:.3f}  "
-                        f"φ={row['phi_width']}  "
-                        f"t={elapsed:.1f}s"
-                    )
-                except Exception as e:
-                    print(f"FAILED — {e}")
-                    traceback.print_exc()
+                tasks.append((ds["name"], partition, kernel, n_est, MAX_SAMPLES))
+
+    total = len(tasks) + skipped
+    done = skipped
+    workers = max(1, min(8, len(tasks)))  # cap threads, but always at least 1
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(_run_clustering_task, t): t for t in tasks}
+        for future in as_completed(futures):
+            done += 1
+            row = future.result()
+            if row is None:
+                continue
+            results.append(row)
+            _append_row(row, OUT_PATH)
+            print(
+                f"  [{done:3d}/{total}] {row['dataset']:28s} {row['partition']:12s} {row['kernel']}  "
+                f"ARI={row['ari_mean']:.3f}+/-{row['ari_std']:.3f}  "
+                f"NMI={row['nmi_mean']:.3f}  "
+                f"phi={row['phi_width']}  "
+                f"t={row['total_time_s']:.1f}s"
+            )
 
     if skipped:
         print(f"\n  Skipped {skipped} already-completed combinations.")
 
     df = pd.DataFrame(results)
-    print(f"\n  Saved {len(df)} rows → {OUT_PATH}")
+    print(f"\n  Saved {len(df)} rows -> {OUT_PATH}")
 
     if len(df) == 0:
         return
 
-    print("\n  Mean ARI per partition × kernel:")
+    print("\n  Mean ARI per partition x kernel:")
     print(
         df.groupby(["partition", "kernel"])["ari_mean"]
         .mean()
@@ -344,7 +363,7 @@ def main():
         .round(3)
         .to_string()
     )
-    print("\n  Mean NMI per partition × kernel:")
+    print("\n  Mean NMI per partition x kernel:")
     print(
         df.groupby(["partition", "kernel"])["nmi_mean"]
         .mean()
@@ -354,7 +373,7 @@ def main():
     )
     print("\n  Mean total_time_s per partition:")
     print(df.groupby("partition")["total_time_s"].mean().round(3).to_string())
-    print("\n  Mean ARI per condition × partition:")
+    print("\n  Mean ARI per condition x partition:")
     print(
         df.groupby(["condition", "partition"])["ari_mean"]
         .mean()

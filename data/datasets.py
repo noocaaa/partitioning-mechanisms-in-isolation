@@ -27,8 +27,19 @@ Usage
 import os
 import io
 import ssl
+import socket
 import warnings
 import urllib.request
+
+# UCI ML Repo SSL certificate is sometimes expired;
+# patch urllib so ucimlrepo (and pandas) bypass SSL verification.
+_orig_urlopen = urllib.request.urlopen
+
+def _patched_urlopen(url, data=None, timeout=socket._GLOBAL_DEFAULT_TIMEOUT, **kwargs):
+    kwargs['context'] = ssl._create_unverified_context()
+    return _orig_urlopen(url, data, timeout, **kwargs)
+
+urllib.request.urlopen = _patched_urlopen
 
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler, LabelEncoder
