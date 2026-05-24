@@ -1170,7 +1170,7 @@ def cb_winners(tab):
             html.P('Best partition per dataset according to the latest experiment results. '
                    'Go to Geometry Lab and select the dataset + winner to inspect why it won.',
                    style={'color': TEXT, 'fontSize': '11px', 'margin': '0 0 12px 0'}),
-        ], mb=10),
+        ], style={'marginBottom': '10px'}),
         html.Table([
             html.Thead(html.Tr([
                 html.Th('Dataset', style={'color': ACCENT, 'textAlign': 'left', 'padding': '8px', 'borderBottom': f'2px solid {ACCENT}'}),
