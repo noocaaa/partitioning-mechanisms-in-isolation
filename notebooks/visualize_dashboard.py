@@ -35,7 +35,7 @@ BL = dict(paper_bgcolor=CARD, plot_bgcolor=CARD,
           margin=dict(l=50,r=20,t=55,b=40),
           legend=dict(bgcolor=CARD2,bordercolor=BORDER,font=dict(color=TEXT,size=9)))
 
-N_EST, SEED = 50, 42
+N_EST, SEED = 200, 42
 
 # All datasets can be shown in geometry (project to 2D if needed)
 DS_GEO = DATASETS   # all datasets, we PCA if >2D
