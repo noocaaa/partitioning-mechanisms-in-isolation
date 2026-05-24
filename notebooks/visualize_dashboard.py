@@ -9,6 +9,7 @@ sys.path.insert(0, ROOT)
 
 import numpy as np
 import pandas as pd
+import joblib
 from sklearn.decomposition import PCA
 from scipy.spatial import Voronoi
 import plotly.graph_objects as go
@@ -37,9 +38,20 @@ BL = dict(paper_bgcolor=CARD, plot_bgcolor=CARD,
           legend=dict(bgcolor=CARD2,bordercolor=BORDER,font=dict(color=TEXT,size=9)))
 
 N_EST, SEED = 200, 42
+MODEL_DIR = os.path.join(ROOT, 'results', 'models')
 
 # All datasets can be shown in geometry (project to 2D if needed)
 DS_GEO = DATASETS   # all datasets, we PCA if >2D
+
+def _load_model(ds_name, method, task):
+    """Load a saved winner model if available, else return None."""
+    if not os.path.exists(MODEL_DIR):
+        return None
+    tag = 'AD' if task == 'AD' else 'CL'
+    pkl = os.path.join(MODEL_DIR, f'{ds_name}_{tag}_{method}.pkl')
+    if os.path.exists(pkl):
+        return joblib.load(pkl)
+    return None
 
 def _pca2(X):
     if X.shape[1] == 2: return X, '2D original'
@@ -265,8 +277,10 @@ def fig_single(ds_name, method, psi, tree_idx, proj_mode='pca'):
     if ds is None: return go.Figure().update_layout(**BL)
     X = ds['X'].astype(np.float32)
     X2, proj = _project2(X, proj_mode)
-    part = get_partition(method,n_estimators=N_EST,max_samples=psi,random_state=SEED)
-    part.fit(X)
+    part = _load_model(ds_name, method, ds['task'])
+    if part is None:
+        part = get_partition(method,n_estimators=N_EST,max_samples=psi,random_state=SEED)
+        part.fit(X)
     traces,xr,yr = geo_traces_2d(X2, ds, method, part, tree_idx)
     is_inne = method=='inne'
     fig = go.Figure(traces)
@@ -293,8 +307,10 @@ def fig_all4(ds_name, psi, proj_mode='pca'):
     ax_map = [(1,1,'','')  ,(1,2,'2','2'),(2,1,'3','3'),(2,2,'4','4')]
     for i,method in enumerate(methods):
         row,col,xs,ys = ax_map[i][0],ax_map[i][1],ax_map[i][2],ax_map[i][3]
-        part = get_partition(method,n_estimators=N_EST,max_samples=psi,random_state=SEED)
-        part.fit(X)
+        part = _load_model(ds_name, method, ds['task'])
+        if part is None:
+            part = get_partition(method,n_estimators=N_EST,max_samples=psi,random_state=SEED)
+            part.fit(X)
         traces,xr,yr = geo_traces_2d(X2, ds, method, part, 0)
         for t in traces:
             t.showlegend = False
@@ -319,8 +335,10 @@ def fig_kernels(ds_name, method, psi):
     if len(X)>400:
         idx=np.random.RandomState(SEED).choice(len(X),400,replace=False)
         X,y=X[idx],y[idx]
-    part=get_partition(method,n_estimators=N_EST,max_samples=psi,random_state=SEED)
-    part.fit(X)
+    part=_load_model(ds_name, method, ds['task'])
+    if part is None:
+        part=get_partition(method,n_estimators=N_EST,max_samples=psi,random_state=SEED)
+        part.fit(X)
     order=np.argsort(y)
     K_ik  = part.similarity_ik(X)[np.ix_(order,order)]
     K_idk = part.similarity_idk(X)[np.ix_(order,order)]
@@ -368,8 +386,10 @@ def fig_scores(ds_name, psi, which, proj_mode='pca'):
 
     for mi,method in enumerate(methods):
         col=mi+1
-        part=get_partition(method,n_estimators=N_EST,max_samples=psi,random_state=SEED)
-        part.fit(X)
+        part=_load_model(ds_name, method, ds['task'])
+        if part is None:
+            part=get_partition(method,n_estimators=N_EST,max_samples=psi,random_state=SEED)
+            part.fit(X)
         for ri,kernel in enumerate(kerns):
             row=ri+1
             sc = (1.0 - part.similarity_ik(X).mean(axis=1)) if kernel=='ik' else part.idk_scores(X)
@@ -473,8 +493,10 @@ def fig_task_lens(ds_name, method, psi, tree_idx, normal_class, proj_mode='pca')
                         f'AD view  (class {normal_class} = normal, rest = anomaly)'],
         horizontal_spacing=0.08)
 
-    part = get_partition(method, n_estimators=N_EST, max_samples=psi, random_state=SEED)
-    part.fit(X)
+    part = _load_model(ds_name, method, ds['task'])
+    if part is None:
+        part = get_partition(method, n_estimators=N_EST, max_samples=psi, random_state=SEED)
+        part.fit(X)
 
     # ── Left: clustering view ──
     for t in _scatter(X2, y, 'C', showlegend=False):
