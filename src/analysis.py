@@ -34,6 +34,7 @@ COND_NAMES = {
 PARTITION_NAMES = {
     'anne':     'Voronoi (aNNE)',
     'inne':     'Hypersphere (iNNE)',
+    'inne-overlapping': 'Hypersphere (iNNE) Overlapping',
     'iforest':  'Axis-parallel (iForest)',
     'sciforest':'Random hyperplane (SCiForest)',
 }
@@ -55,7 +56,7 @@ def _summarise_task(df, metric, task_label):
     print(f"{'='*72}")
 
     pivot = df.groupby(['condition', 'partition'])[f'{metric}_mean'].mean().unstack()
-    pivot = pivot.reindex(columns=['anne', 'inne', 'iforest', 'sciforest'])
+    pivot = pivot.reindex(columns=['anne', 'inne', 'inne-overlapping', 'iforest', 'sciforest'])
     pivot.columns = [PARTITION_NAMES[c] for c in pivot.columns]
     pivot.index = [f"C{i} — {COND_NAMES[i]}" for i in pivot.index]
     print(pivot.round(3).to_string())
@@ -78,7 +79,7 @@ def _efficiency_summary(ad_df, cl_df):
     if ad_df is not None:
         print("\n  Anomaly Detection — AUC per second (higher = more bang for the buck)")
         eff = ad_df.groupby('partition')[['auc_per_sec', 'total_time_s']].mean()
-        eff = eff.reindex(['anne', 'inne', 'iforest', 'sciforest'])
+        eff = eff.reindex(['anne', 'inne', 'inne-overlapping', 'iforest', 'sciforest'])
         eff.index = [PARTITION_NAMES[i] for i in eff.index]
         print(eff.round(3).to_string())
 
@@ -86,7 +87,7 @@ def _efficiency_summary(ad_df, cl_df):
     if cl_df is not None:
         print("\n  Clustering — ARI per second (higher = more bang for the buck)")
         eff = cl_df.groupby('partition')[['ari_per_sec', 'total_time_s']].mean()
-        eff = eff.reindex(['anne', 'inne', 'iforest', 'sciforest'])
+        eff = eff.reindex(['anne', 'inne', 'inne-overlapping', 'iforest', 'sciforest'])
         eff.index = [PARTITION_NAMES[i] for i in eff.index]
         print(eff.round(3).to_string())
 
@@ -179,7 +180,7 @@ def _time_summary(ad_df, cl_df):
             continue
         print(f"\n  {label}:")
         timing = df.groupby('partition')[['fit_time_s', 'transform_time_s', 'total_time_s']].mean()
-        timing = timing.reindex(['anne', 'inne', 'iforest', 'sciforest'])
+        timing = timing.reindex(['anne', 'inne', 'inne-overlapping', 'iforest', 'sciforest'])
         timing.index = [PARTITION_NAMES[i] for i in timing.index]
         print(timing.round(3).to_string())
 

@@ -22,8 +22,9 @@ from src.partitions import get_partition, PARTITION_NAMES
 BG, CARD, CARD2 = "#0f0f1e", "#181830", "#1e1e3a"
 BORDER, TEXT, MUTED, ACCENT = "#2e2e5a", "#d0d0f0", "#6666a0", "#6af0f7"
 GRID = "#1a1a35"
-PC   = {'anne':'#f7a55a','inne':'#5af0f7','iforest':'#5af7a0','sciforest':'#f75aab'}
+PC   = {'anne':'#f7a55a','inne':'#5af0f7','inne-overlapping':'#a07af7','iforest':'#5af7a0','sciforest':'#f75aab'}
 PC_RGBA = {'anne':'rgba(247,165,90,0.2)','inne':'rgba(90,240,247,0.2)',
+          'inne-overlapping':'rgba(160,122,247,0.2)',
           'iforest':'rgba(90,247,160,0.2)','sciforest':'rgba(247,90,171,0.2)'}
 CPAL = ['#5af0f7','#f7a55a','#5af7a0','#f75aab','#a07af7','#f7e05a','#5af7d0']
 COND_NAME = {1:'Spherical',2:'Elongated',3:'Crescent',4:'Nested',5:'Density',6:'High-dim',7:'Large'}
@@ -284,7 +285,7 @@ def fig_all4(ds_name, psi, proj_mode='pca'):
     if ds is None: return go.Figure().update_layout(**BL)
     X = ds['X'].astype(np.float32)
     X2, proj = _project2(X, proj_mode)
-    methods = ['anne','inne','iforest','sciforest']
+    methods = ['anne','inne','inne-overlapping','iforest','sciforest']
     fig = make_subplots(2,2,
         subplot_titles=[PARTITION_NAMES[m] for m in methods],
         horizontal_spacing=0.05, vertical_spacing=0.10)
@@ -352,7 +353,7 @@ def fig_scores(ds_name, psi, which, proj_mode='pca'):
     if ds is None: return go.Figure().update_layout(**BL)
     X=ds['X'].astype(np.float32); y=ds['y']
     X2,proj = _project2(X, proj_mode)
-    methods=['anne','inne','iforest','sciforest']
+    methods=['anne','inne','inne-overlapping','iforest','sciforest']
     rows=max(1,len(which or []))
     kerns = which or ['idk']
     cs_map = {'ik':'RdYlBu_r','idk':'RdYlBu_r'}
@@ -537,7 +538,7 @@ def fig_tradeoff(task_filter='all', cond_filter=0, metric_x='total_time_s'):
     if cond_filter>0: full=full[full['condition']==cond_filter]
 
     fig1=go.Figure()
-    for m in ['anne','inne','iforest','sciforest']:
+    for m in ['anne','inne','inne-overlapping','iforest','sciforest']:
         sub=full[full['partition']==m]
         if len(sub)==0: continue
         fig1.add_trace(go.Scatter(
@@ -554,7 +555,7 @@ def fig_tradeoff(task_filter='all', cond_filter=0, metric_x='total_time_s'):
         yaxis=dict(gridcolor=GRID,title='score (AUC or ARI)',range=[0,1.05]))
 
     fig2=go.Figure()
-    for m in ['anne','inne','iforest','sciforest']:
+    for m in ['anne','inne','inne-overlapping','iforest','sciforest']:
         sub=full[full['partition']==m]
         if len(sub)==0: continue
         fig2.add_trace(go.Box(
@@ -596,7 +597,7 @@ TA={**TS,'backgroundColor':CARD,'color':ACCENT,'borderBottom':f'2px solid {ACCEN
 
 PSI=[{'label':f'ψ = {v}','value':v} for v in [4,8,16,32,64]]
 TREES=[{'label':f'tree {i}','value':i} for i in range(8)]
-METHS=[{'label':PARTITION_NAMES[m],'value':m} for m in ['anne','inne','iforest','sciforest']]
+METHS=[{'label':PARTITION_NAMES[m],'value':m} for m in ['anne','inne','inne-overlapping','iforest','sciforest']]
 
 def _dd(id_,opts,val,w='100%'):
     return dcc.Dropdown(id=id_,options=opts,value=val,clearable=False,
