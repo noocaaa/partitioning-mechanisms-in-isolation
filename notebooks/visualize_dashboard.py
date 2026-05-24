@@ -648,6 +648,7 @@ app.layout=html.Div(
             dcc.Tab(label='Task Lens',       value='tasklens', style=TS,selected_style=TA),
             dcc.Tab(label='Dataset Browser', value='browser',  style=TS,selected_style=TA),
             dcc.Tab(label='Trade-off',       value='tradeoff', style=TS,selected_style=TA),
+            dcc.Tab(label='Winners',         value='winners',  style=TS,selected_style=TA),
         ]),
         html.Div(id='tab-content',
                  style={'backgroundColor':CARD,'borderRadius':'0 10px 10px 10px',
@@ -936,6 +937,12 @@ def render(tab):
             html.Div(id='t-figs'),
         ])
 
+    # ── Winners ───────────────────────────────────────────────────────────
+    elif tab=='winners':
+        return html.Div([
+            html.Div(id='w-content'),
+        ])
+
 
 # ── Callbacks ──────────────────────────────────────────────────────────────
 
@@ -1041,6 +1048,117 @@ def cb_tradeoff(task,cond,xmet):
     figs=fig_tradeoff(task or 'all',cond or 0,xmet or 'total_time_s')
     return [dcc.Graph(figure=f,config={'displayModeBar':True},
                       style={'marginBottom':'12px'}) for f in figs]
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# WINNERS TAB
+# ══════════════════════════════════════════════════════════════════════════
+
+def _load_winners():
+    """Load result CSVs and return (ad_winners, cl_winners) dicts."""
+    ad_path = os.path.join(ROOT, 'results', 'anomaly_detection', 'auc_results.csv')
+    cl_path = os.path.join(ROOT, 'results', 'clustering', 'ari_results.csv')
+    ad_win, cl_win = {}, {}
+    if os.path.exists(ad_path):
+        df = pd.read_csv(ad_path)
+        # Use the most recent run per (dataset, partition, kernel)
+        df = df.sort_values('timestamp').drop_duplicates(
+            ['dataset', 'partition', 'kernel'], keep='last'
+        )
+        # Best partition per dataset (max auc_mean across both kernels)
+        best = df.loc[df.groupby('dataset')['auc_mean'].idxmax()]
+        for _, r in best.iterrows():
+            ad_win[r['dataset']] = {
+                'partition': r['partition'],
+                'partition_name': PARTITION_NAMES.get(r['partition'], r['partition']),
+                'kernel': r['kernel'],
+                'score': r['auc_mean'],
+                'score_std': r['auc_std'],
+                'time': r['total_time_s'],
+                'condition': r['condition'],
+            }
+    if os.path.exists(cl_path):
+        df = pd.read_csv(cl_path)
+        df = df.sort_values('timestamp').drop_duplicates(
+            ['dataset', 'partition', 'kernel'], keep='last'
+        )
+        best = df.loc[df.groupby('dataset')['ari_mean'].idxmax()]
+        for _, r in best.iterrows():
+            cl_win[r['dataset']] = {
+                'partition': r['partition'],
+                'partition_name': PARTITION_NAMES.get(r['partition'], r['partition']),
+                'kernel': r['kernel'],
+                'score': r['ari_mean'],
+                'score_std': r['ari_std'],
+                'time': r['total_time_s'],
+                'condition': r['condition'],
+            }
+    return ad_win, cl_win
+
+
+@callback(Output('w-content','children'),
+          Input('tabs','value'))
+def cb_winners(tab):
+    if tab != 'winners':
+        return []
+    ad_win, cl_win = _load_winners()
+    if not ad_win and not cl_win:
+        return html.Div([
+            html.P('No results found. Run experiments first:', style={'color': MUTED}),
+            html.P('python experiments/run_anomaly.py', style={'color': ACCENT}),
+            html.P('python experiments/run_clustering.py', style={'color': ACCENT}),
+        ])
+
+    rows = []
+    for name in sorted(set(list(ad_win.keys()) + list(cl_win.keys()))):
+        ad = ad_win.get(name)
+        cl = cl_win.get(name)
+        ds = DATASETS.get(name)
+        cond = int(ds['condition']) if ds else (ad['condition'] if ad else cl['condition'])
+        task_badge = []
+        if ad:
+            task_badge.append(html.Span('AD', style={
+                'backgroundColor': '#ff5a5a22', 'color': '#ff5a5a',
+                'padding': '2px 8px', 'borderRadius': '4px', 'fontSize': '10px',
+                'marginRight': '6px'
+            }))
+        if cl:
+            task_badge.append(html.Span('C', style={
+                'backgroundColor': '#5af7a022', 'color': '#5af7a0',
+                'padding': '2px 8px', 'borderRadius': '4px', 'fontSize': '10px'
+            }))
+        rows.append(html.Tr([
+            html.Td(name, style={'color': TEXT, 'padding': '8px', 'borderBottom': f'1px solid {BORDER}'}),
+            html.Td(task_badge, style={'padding': '8px', 'borderBottom': f'1px solid {BORDER}'}),
+            html.Td(f'C{cond}', style={'color': MUTED, 'padding': '8px', 'borderBottom': f'1px solid {BORDER}'}),
+            html.Td([
+                html.Span(ad['partition_name'] if ad else '-', style={'color': PC.get(ad['partition'], TEXT) if ad else MUTED}),
+                html.Span(f'  {ad["score"]:.3f}' if ad else '', style={'color': MUTED, 'fontSize': '10px'}),
+            ], style={'padding': '8px', 'borderBottom': f'1px solid {BORDER}'}),
+            html.Td([
+                html.Span(cl['partition_name'] if cl else '-', style={'color': PC.get(cl['partition'], TEXT) if cl else MUTED}),
+                html.Span(f'  {cl["score"]:.3f}' if cl else '', style={'color': MUTED, 'fontSize': '10px'}),
+            ], style={'padding': '8px', 'borderBottom': f'1px solid {BORDER}'}),
+        ]))
+
+    return html.Div([
+        html.Div([
+            _head('Experiment Winners'),
+            html.P('Best partition per dataset according to the latest experiment results. '
+                   'Go to Geometry Lab and select the dataset + winner to inspect why it won.',
+                   style={'color': TEXT, 'fontSize': '11px', 'margin': '0 0 12px 0'}),
+        ], mb=10),
+        html.Table([
+            html.Thead(html.Tr([
+                html.Th('Dataset', style={'color': ACCENT, 'textAlign': 'left', 'padding': '8px', 'borderBottom': f'2px solid {ACCENT}'}),
+                html.Th('Task', style={'color': ACCENT, 'textAlign': 'left', 'padding': '8px', 'borderBottom': f'2px solid {ACCENT}'}),
+                html.Th('Cond', style={'color': ACCENT, 'textAlign': 'left', 'padding': '8px', 'borderBottom': f'2px solid {ACCENT}'}),
+                html.Th('AD Winner  (AUC)', style={'color': ACCENT, 'textAlign': 'left', 'padding': '8px', 'borderBottom': f'2px solid {ACCENT}'}),
+                html.Th('CL Winner  (ARI)', style={'color': ACCENT, 'textAlign': 'left', 'padding': '8px', 'borderBottom': f'2px solid {ACCENT}'}),
+            ])),
+            html.Tbody(rows),
+        ], style={'width': '100%', 'fontSize': '12px', 'borderCollapse': 'collapse'}),
+    ])
 
 
 if __name__=='__main__':
