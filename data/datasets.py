@@ -345,6 +345,17 @@ _register('syn_gauss_quantiles',
           'C', 'nested', 'uniform', 'low', 'small', 'sklearn_gen', 4)
 
 
+def _make_circles_ad():
+    """Concentric circles: points on the rings = normal, random background = anomaly."""
+    X_in, _ = make_circles(n_samples=950, noise=0.05, factor=0.4, random_state=42)
+    rng = np.random.RandomState(0)
+    X_out = rng.uniform(-1.5, 1.5, (50, 2))
+    return np.vstack([X_in, X_out]), np.array([0]*950 + [1]*50)
+
+_register('syn_circles_ad', _make_circles_ad,
+          'AD', 'nested', 'uniform', 'low', 'small', 'sklearn_gen', 4)
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # CONDITION 5 — Varying density
 # ══════════════════════════════════════════════════════════════════════════

@@ -204,7 +204,16 @@ def run_one(ds, partition_method, kernel, n_estimators, max_samples):
         score_t = time.perf_counter() - t0
 
         try:
-            auc = roc_auc_score(y, scores)
+            labels = np.unique(y)
+            if len(labels) == 2:
+                counts = np.bincount(y.astype(int))
+                anomaly_label = int(np.argmin(counts))  # rarer class = anomaly
+                # sklearn <1.6 does not support pos_label in roc_auc_score;
+                # flip labels so anomaly is always class 1.
+                y_auc = y if anomaly_label == 1 else 1 - y
+                auc = roc_auc_score(y_auc, scores)
+            else:
+                auc = float("nan")
         except Exception:
             auc = float("nan")
 
