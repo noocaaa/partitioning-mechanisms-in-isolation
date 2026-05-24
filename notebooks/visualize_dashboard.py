@@ -8,6 +8,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 import numpy as np
+import pandas as pd
 from sklearn.decomposition import PCA
 from scipy.spatial import Voronoi
 import plotly.graph_objects as go
@@ -285,7 +286,7 @@ def fig_all4(ds_name, psi, proj_mode='pca'):
     if ds is None: return go.Figure().update_layout(**BL)
     X = ds['X'].astype(np.float32)
     X2, proj = _project2(X, proj_mode)
-    methods = ['anne','inne','inne-overlapping','iforest','sciforest']
+    methods = ['anne','inne','iforest','sciforest']
     fig = make_subplots(2,2,
         subplot_titles=[PARTITION_NAMES[m] for m in methods],
         horizontal_spacing=0.05, vertical_spacing=0.10)
