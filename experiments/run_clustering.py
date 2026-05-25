@@ -8,6 +8,7 @@ Saves to: results/clustering/ari_results.csv
 Usage:
     python experiments/run_clustering.py
     python experiments/run_clustering.py --fast
+    python experiments/run_clustering.py --t 200 --psi 16
     python experiments/run_clustering.py --dataset iris
     python experiments/run_clustering.py --partition anne
     python experiments/run_clustering.py --partition anne inne
@@ -79,18 +80,21 @@ def _run_clustering_task(task):
     """Worker: run one (dataset, partition, kernel) combination."""
     ds_name, partition, kernel, n_est, max_samples = task
     from data.datasets import DATASETS
+
     ds = DATASETS[ds_name]
     return run_one(ds, partition, kernel, n_est, max_samples)
 
 
-def _load_existing(path, n_estimators):
-    """Load existing CSV and return set of completed keys for current n_estimators."""
+def _load_existing(path, n_estimators, max_samples):
+    """Load existing CSV and return set of completed keys for current settings."""
     if not os.path.exists(path):
         return set(), []
     try:
         df = pd.read_csv(path)
-        # Only consider rows with matching n_estimators so fast/full can coexist
-        df_match = df[df["n_estimators"] == n_estimators]
+        # Only consider rows with matching settings so fast/full and psi sweeps can coexist
+        df_match = df[
+            (df["n_estimators"] == n_estimators) & (df["max_samples"] == max_samples)
+        ]
         keys = set(
             zip(
                 df_match["dataset"],
@@ -264,6 +268,22 @@ def main():
     parser.add_argument("--fast", action="store_true")
     parser.add_argument("--dataset", type=str, default=None)
     parser.add_argument(
+        "--t",
+        "--n-estimators",
+        dest="t",
+        type=int,
+        default=None,
+        help="Number of estimators to use (defaults to the script constant, or 50 with --fast)",
+    )
+    parser.add_argument(
+        "--psi",
+        "--max-samples",
+        dest="psi",
+        type=int,
+        default=None,
+        help="Maximum samples per estimator (defaults to the script constant)",
+    )
+    parser.add_argument(
         "--partition",
         nargs="+",
         default=None,
@@ -271,12 +291,15 @@ def main():
     )
     args = parser.parse_args()
 
-    n_est = 50 if args.fast else N_ESTIMATORS
+    n_est = args.t if args.t is not None else (50 if args.fast else N_ESTIMATORS)
+    max_samples = args.psi if args.psi is not None else MAX_SAMPLES
     os.makedirs(OUT_DIR, exist_ok=True)
 
     cl_datasets = []
     for ds in DATASETS.values():
-        if ds["task"] != "C" or (args.dataset is not None and ds["name"] != args.dataset):
+        if ds["task"] != "C" or (
+            args.dataset is not None and ds["name"] != args.dataset
+        ):
             continue
         try:
             _ = ds["X"]  # trigger lazy load once
@@ -304,13 +327,13 @@ def main():
     print(f"  Datasets   : {len(cl_datasets)}")
     print(f"  Partitions : {partitions}")
     print(f"  Kernels    : {KERNELS}")
-    print(f"  n_est      : {n_est}   psi : {MAX_SAMPLES}")
+    print(f"  n_est      : {n_est}   psi : {max_samples}")
     print(f"  Runs each  : {N_RUNS}")
     print(f"  Output     : {OUT_DIR}")
     print("=" * 68)
     print()
 
-    completed, results = _load_existing(OUT_PATH, n_est)
+    completed, results = _load_existing(OUT_PATH, n_est, max_samples)
     total = len(cl_datasets) * len(partitions) * len(KERNELS)
     done = len(results)
     skipped = 0
@@ -323,7 +346,7 @@ def main():
                 if key in completed:
                     skipped += 1
                     continue
-                tasks.append((ds["name"], partition, kernel, n_est, MAX_SAMPLES))
+                tasks.append((ds["name"], partition, kernel, n_est, max_samples))
 
     total = len(tasks) + skipped
     done = skipped
