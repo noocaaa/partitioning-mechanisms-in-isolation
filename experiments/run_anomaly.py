@@ -8,7 +8,7 @@ Saves to: results/anomaly_detection/auc_results.csv
 Usage:
     python experiments/run_anomaly.py
     python experiments/run_anomaly.py --fast
-    python experiments/run_anomaly.py --t 200 --psi 16
+    python experiments/run_anomaly.py --t 200 --psi 256
     python experiments/run_anomaly.py --dataset thyroid
     python experiments/run_anomaly.py --partition anne
     python experiments/run_anomaly.py --partition anne inne
@@ -34,7 +34,13 @@ from data.datasets import DATASETS
 PARTITIONS = ["anne", "inne", "inne-overlapping", "iforest", "sciforest"]
 KERNELS = ["ik", "idk"]
 N_ESTIMATORS = 200
-MAX_SAMPLES = 16
+DEFAULT_MAX_SAMPLES_BY_PARTITION = {
+    "anne": 16,
+    "inne": 16,
+    "inne-overlapping": 16,
+    "iforest": 256,
+    "sciforest": 256,
+}
 RANDOM_STATE = 42
 N_RUNS = 5
 MAX_N = 10000  # subsample threshold
@@ -99,15 +105,17 @@ def _get_auc_consistent_masks(y):
     return normal_mask, anomaly_mask
 
 
-def _load_existing(path, n_estimators, max_samples):
-    """Load existing CSV and return set of completed keys for current settings."""
+def _load_existing(path, n_estimators, partition_max_samples):
+    """Load existing CSV and return completed keys for current estimator/psi config."""
     if not os.path.exists(path):
         return set(), []
     try:
         df = pd.read_csv(path)
-        # Only consider rows with matching settings so fast/full and psi sweeps can coexist
-        df_match = df[
-            (df["n_estimators"] == n_estimators) & (df["max_samples"] == max_samples)
+        # Keep only rows matching requested estimator and per-partition max_samples.
+        df_match = df[df["n_estimators"] == n_estimators]
+        df_match = df_match[df_match["partition"].isin(partition_max_samples.keys())]
+        df_match = df_match[
+            df_match["max_samples"] == df_match["partition"].map(partition_max_samples)
         ]
         keys = set(
             zip(
@@ -115,9 +123,10 @@ def _load_existing(path, n_estimators, max_samples):
                 df_match["partition"],
                 df_match["kernel"],
                 df_match["n_estimators"],
+                df_match["max_samples"],
             )
         )
-        return keys, df.to_dict("records")
+        return keys, df_match.to_dict("records")
     except Exception:
         return set(), []
 
@@ -326,7 +335,6 @@ def main():
     args = parser.parse_args()
 
     n_est = args.t if args.t is not None else (50 if args.fast else N_ESTIMATORS)
-    max_samples = args.psi if args.psi is not None else MAX_SAMPLES
     os.makedirs(OUT_DIR, exist_ok=True)
 
     ad_datasets = []
@@ -355,19 +363,28 @@ def main():
     else:
         partitions = PARTITIONS
 
+    partition_max_samples = {
+        p: (args.psi if args.psi is not None else DEFAULT_MAX_SAMPLES_BY_PARTITION[p])
+        for p in partitions
+    }
+
     print("=" * 68)
     print("  IK Partitioning Study — Anomaly Detection Experiments")
     print("=" * 68)
     print(f"  Datasets   : {len(ad_datasets)}")
     print(f"  Partitions : {partitions}")
     print(f"  Kernels    : {KERNELS}")
-    print(f"  n_est      : {n_est}   psi : {max_samples}")
+    if args.psi is not None:
+        print(f"  n_est      : {n_est}   psi (override): {args.psi}")
+    else:
+        psi_desc = ", ".join(f"{p}={partition_max_samples[p]}" for p in partitions)
+        print(f"  n_est      : {n_est}   psi defaults: {psi_desc}")
     print(f"  Runs each  : {N_RUNS}")
     print(f"  Output     : {OUT_DIR}")
     print("=" * 68)
     print()
 
-    completed, results = _load_existing(OUT_PATH, n_est, max_samples)
+    completed, results = _load_existing(OUT_PATH, n_est, partition_max_samples)
     total = len(ad_datasets) * len(partitions) * len(KERNELS)
     done = len(results)
     skipped = 0
@@ -375,12 +392,13 @@ def main():
     tasks = []
     for ds in ad_datasets:
         for partition in partitions:
+            partition_psi = partition_max_samples[partition]
             for kernel in KERNELS:
-                key = (ds["name"], partition, kernel, n_est)
+                key = (ds["name"], partition, kernel, n_est, partition_psi)
                 if key in completed:
                     skipped += 1
                     continue
-                tasks.append((ds["name"], partition, kernel, n_est, max_samples))
+                tasks.append((ds["name"], partition, kernel, n_est, partition_psi))
 
     total = len(tasks) + skipped
     done = skipped
