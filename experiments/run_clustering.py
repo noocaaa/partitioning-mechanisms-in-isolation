@@ -77,6 +77,7 @@ RESULT_COLUMNS = [
     "nmi_per_sec",
     "phi_width",
     "coverage_rate",
+    "phi_ones_per_point_per_estimator",
     "n_estimators",
     "max_samples",
     "n_runs",
@@ -149,6 +150,7 @@ def run_one(ds, partition_method, kernel, n_estimators, max_samples):
     fit_times, transform_times, kernel_times = [], [], []
     phi_widths = []
     coverage_rates = []
+    phi_ones_per_point_per_estimator = []
 
     for run in range(N_RUNS):
         part = get_partition(
@@ -170,6 +172,9 @@ def run_one(ds, partition_method, kernel, n_estimators, max_samples):
         transform_t = time.perf_counter() - t0
         phi_widths.append(phi.shape[1])
         coverage_rates.append(part.average_coverage_rate(X, phi=phi))
+        phi_ones_per_point_per_estimator.append(
+            float(phi.nnz) / float(phi.shape[0] * n_estimators)
+        )
 
         # ── kernel matrix ─────────────────────────────────────────
         t0 = time.perf_counter()
@@ -270,6 +275,9 @@ def run_one(ds, partition_method, kernel, n_estimators, max_samples):
         # ── partition characteristics ─────────────────────────────
         "phi_width": int(np.mean(phi_widths)),  # avg cells across runs
         "coverage_rate": round(float(np.nanmean(coverage_rates)), 4),
+        "phi_ones_per_point_per_estimator": round(
+            float(np.mean(phi_ones_per_point_per_estimator)), 4
+        ),
         "n_estimators": n_estimators,
         "max_samples": max_samples,
         "n_runs": N_RUNS,

@@ -1,7 +1,7 @@
 """
 src/partitions.py  —  IK Partitioning Study
 =============================================
-All partitioning mechanisms × 2 kernel types (IK and IDK).
+All partitioning mechanisms x 2 kernel types (IK and IDK).
 No C++ compiler or isotree required.
 
 PARTITIONS (Cao et al. 2025, Table 1):
@@ -13,7 +13,7 @@ PARTITIONS (Cao et al. 2025, Table 1):
 
 KERNEL TYPES:
   IK   κ(x,y)   = (1/t) <Φ(x), Φ(y)>           — point similarity
-  IDK  Κ(Di,Dj) = (1/t) <KME(Di), KME(Dj)>     — distribution similarity
+  IDK  K(Di,Dj) = (1/t) <KME(Di), KME(Dj)>     — distribution similarity
 
 Usage:
     from src.partitions import get_partition
@@ -73,18 +73,15 @@ PARTITION_PAPERS = {
 
 
 def _ik_sim(phi_X, phi_Y, n_est):
-    """κ(X,Y) = (1/t) Φ(X) Φ(Y)ᵀ"""
     K = (phi_X @ phi_Y.T) / n_est
     return K.toarray() if sparse.issparse(K) else np.array(K)
 
 
 def _kme(phi):
-    """Kernel Mean Embedding: (1/|D|) Σ Φ(x)"""
     return np.asarray(phi.mean(axis=0)).ravel()
 
 
 def _idk_scalar(kme_i, kme_j, n_est, normalize=True):
-    """IDK scalar between two KMEs."""
     raw = np.dot(kme_i, kme_j) / n_est
     if normalize:
         ni = np.sqrt(np.dot(kme_i, kme_i) / n_est)
@@ -97,37 +94,44 @@ def _idk_scalar(kme_i, kme_j, n_est, normalize=True):
 
 
 class _FixedLeafMapper:
-    """
-    Learns the leaf-ID → column mapping from training data,
-    then applies the SAME fixed-width mapping to any new data.
-    Ensures phi_train and phi_test always have the same number of columns.
-    """
-
     def fit(self, leaves_train):
         n, n_est = leaves_train.shape
-        self._maps = []
         self._offsets = []
+        self._uid_arrays = []   # sorted unique leaf IDs per tree
+        self._col_arrays = []   # corresponding column indices per tree
         total = 0
         for t in range(n_est):
-            uids = np.unique(leaves_train[:, t])
-            mapping = {int(uid): i for i, uid in enumerate(uids)}
-            self._maps.append(mapping)
+            uids = np.unique(leaves_train[:, t])          # already sorted by np.unique
+            cols = np.arange(len(uids), dtype=np.int32)  # 0, 1, 2, ...
+            self._uid_arrays.append(uids.astype(np.int64))
+            self._col_arrays.append(cols)
             self._offsets.append(total)
             total += len(uids)
         self._total_cells = total
         self._n_est = n_est
+        # _maps dict no longer needed — uid_arrays/col_arrays are used directly
         return self
 
     def transform(self, leaves_matrix):
+        # FIX 🟡: vectorized — no Python loop over individual samples
         n_samples = leaves_matrix.shape[0]
-        rows, cols, data = [], [], []
+        rows_list, cols_list = [], []
         for t in range(self._n_est):
-            m = self._maps[t]
+            uids = self._uid_arrays[t]
+            col_map = self._col_arrays[t]
             off = self._offsets[t]
-            for i, lid in enumerate(leaves_matrix[:, t]):
-                cols.append(m.get(int(lid), 0) + off)
-                rows.append(i)
-                data.append(1.0)
+            leaf_col = leaves_matrix[:, t].astype(np.int64)
+            # searchsorted finds where each leaf_id sits in the sorted uid array
+            pos = np.searchsorted(uids, leaf_col)
+            # clip to valid range (unseen leaves at test time map to column 0)
+            pos = np.clip(pos, 0, len(uids) - 1)
+            matched = uids[pos] == leaf_col          # True where leaf was seen in training
+            mapped_cols = np.where(matched, col_map[pos] + off, off)  # unseen → col 0
+            rows_list.append(np.arange(n_samples))
+            cols_list.append(mapped_cols)
+        rows = np.concatenate(rows_list)
+        cols = np.concatenate(cols_list)
+        data = np.ones(len(rows), dtype=np.float32)
         return sparse.csr_matrix(
             (data, (rows, cols)), shape=(n_samples, self._total_cells)
         )
@@ -139,11 +143,6 @@ class _FixedLeafMapper:
 
 
 class _BasePartition(TransformerMixin, BaseEstimator):
-    """
-    Base class for all partitions.
-    Provides IK and IDK similarity methods after fit.
-    """
-
     def __init__(self, n_estimators=200, max_samples=16, random_state=42):
         self.n_estimators = n_estimators
         self.max_samples = max_samples
@@ -152,11 +151,12 @@ class _BasePartition(TransformerMixin, BaseEstimator):
     def fit(self, X, y=None):
         X = check_array(X).astype(np.float32)
         self._fit_partition(X)
+        phi_train = self._transform_partition(X)
+        self._train_kme = _kme(phi_train)
         self.is_fitted_ = True
         return self
 
     def transform(self, X):
-        """Sparse binary feature map Φ(X) — same width as training."""
         check_is_fitted(self, "is_fitted_")
         return self._transform_partition(check_array(X).astype(np.float32))
 
@@ -206,11 +206,6 @@ class _BasePartition(TransformerMixin, BaseEstimator):
     # ── IK ─────────────────────────────────────────────────────────────────
 
     def similarity_ik(self, X, Y=None):
-        """
-        IK: κ(X,Y) = (1/t) Φ(X) Φ(Y)ᵀ
-        Similarity between individual POINTS.
-        Returns (n_X, n_Y) matrix in [0,1].
-        """
         phi_X = self.transform(X)
         phi_Y = self.transform(Y) if Y is not None else phi_X
         return _ik_sim(phi_X, phi_Y, self.n_estimators)
@@ -218,12 +213,6 @@ class _BasePartition(TransformerMixin, BaseEstimator):
     # ── IDK ────────────────────────────────────────────────────────────────
 
     def similarity_idk(self, X, normalize=True):
-        """
-        IDK point-level matrix.
-        Each point treated as singleton distribution.
-        For singletons: IDK(x_i, x_j) = normalized IK(x_i, x_j).
-        Returns (n, n) matrix in [0,1].
-        """
         phi_X = self.transform(X)
         K = _ik_sim(phi_X, phi_X, self.n_estimators)
         if normalize:
@@ -233,30 +222,32 @@ class _BasePartition(TransformerMixin, BaseEstimator):
         return np.clip(K, 0, 1)
 
     def idk_between(self, Di, Dj, normalize=True):
-        """
-        IDK: similarity between two DISTRIBUTIONS (groups of points).
-            KME(D) = mean of Φ(x) for x in D
-            IDK(Di,Dj) = <KME(Di), KME(Dj)> / t
-        Returns float in [0,1].
-        """
         phi_i = self.transform(Di)
         phi_j = self.transform(Dj)
         return _idk_scalar(_kme(phi_i), _kme(phi_j), self.n_estimators, normalize)
 
     def idk_scores(self, X, normalize=True):
-        """
-        IDK anomaly scores.
-        score(x_i) = 1 - IDK(x_i, global_distribution)
-        Higher score → more anomalous.
-        Returns (n,) array in [0,1].
-        """
-        phi_X = self.transform(X)
-        g_kme = _kme(phi_X)  # global KME = mean over all test points
-        scores = np.zeros(len(X))
-        for i in range(len(X)):
-            phi_i = np.asarray(phi_X[i].todense()).ravel()
-            scores[i] = 1.0 - _idk_scalar(phi_i, g_kme, self.n_estimators, normalize)
-        return np.clip(scores, 0, 1)
+        check_is_fitted(self, "is_fitted_")
+        phi_X = self.transform(X)                          # (n, d) sparse
+        g_kme = self._train_kme                            # (d,) from fit()
+
+        # Vectorized IDK: each row of phi_X dotted with g_kme
+        # raw(i) = phi_X[i] · g_kme / n_est
+        phi_dense = np.asarray(phi_X.dot(g_kme)).ravel()  # (n,)  sparse × dense
+        raw = phi_dense / self.n_estimators
+
+        if normalize:
+            # norm of each point's KME = sqrt(phi_X[i]·phi_X[i] / n_est)
+            phi_sq = np.asarray(phi_X.power(2).sum(axis=1)).ravel()  # (n,)
+            ni = np.sqrt(phi_sq / self.n_estimators)
+            # norm of training KME
+            nj = np.sqrt(np.dot(g_kme, g_kme) / self.n_estimators)
+            denom = ni * nj
+            similarity = np.where(denom > 0, raw / denom, 0.0)
+        else:
+            similarity = raw
+
+        return np.clip(1.0 - similarity, 0, 1)
 
     def similarity(self, X, Y=None, kernel="ik"):
         """Convenience wrapper. kernel='ik' or 'idk'."""
@@ -396,16 +387,88 @@ class _SCiTree:
     def fit(self, X):
         self._tree = self._build(X)
         self._ids(self._tree)
+        self._nodes_feat  = []   # list of feat arrays, one per internal node
+        self._nodes_coef  = []
+        self._nodes_split = []
+        self._nodes_left  = []   # child node index (-1 = leaf)
+        self._nodes_right = []
+        self._nodes_leaf_id = [] # leaf id (-1 = internal node)
+        self._compile(self._tree)
+        self._nodes_split = np.array(self._nodes_split, dtype=np.float32)
+        self._nodes_left  = np.array(self._nodes_left,  dtype=np.int32)
+        self._nodes_right = np.array(self._nodes_right, dtype=np.int32)
+        self._nodes_leaf_id = np.array(self._nodes_leaf_id, dtype=np.int32)
         return self
 
+    def _compile(self, node):
+        if node["leaf"]:
+            self._nodes_feat.append(None)
+            self._nodes_coef.append(None)
+            self._nodes_split.append(0.0)
+            self._nodes_left.append(-1)
+            self._nodes_right.append(-1)
+            self._nodes_leaf_id.append(node["id"])
+        else:
+            idx = len(self._nodes_split)
+            # Reserve slot first, fill children recursively
+            self._nodes_feat.append(node["feat"])
+            self._nodes_coef.append(node["coef"])
+            self._nodes_split.append(node["split"])
+            self._nodes_left.append(-1)   # placeholder
+            self._nodes_right.append(-1)  # placeholder
+            self._nodes_leaf_id.append(-1)
+            left_idx = len(self._nodes_split)
+            self._compile(node["left"])
+            right_idx = len(self._nodes_split)
+            self._compile(node["right"])
+            self._nodes_left[idx]  = left_idx
+            self._nodes_right[idx] = right_idx
+
     def apply(self, X):
-        ids = np.zeros(len(X), dtype=np.int32)
-        for i, x in enumerate(X):
-            n = self._tree
-            while not n["leaf"]:
-                n = n["left"] if x[n["feat"]] @ n["coef"] <= n["split"] else n["right"]
-            ids[i] = n["id"]
-        return ids
+        n = len(X)
+        node_ids = np.zeros(n, dtype=np.int32)   # all start at root (node 0)
+        leaf_ids  = np.full(n, -1, dtype=np.int32)
+        active    = np.ones(n, dtype=bool)
+
+        while active.any():
+            active_idx = np.where(active)[0]
+            cur        = node_ids[active_idx]
+
+            # ── settle samples that landed on a leaf ──────────────────────
+            is_leaf              = self._nodes_leaf_id[cur] >= 0
+            done_idx             = active_idx[is_leaf]
+            leaf_ids[done_idx]   = self._nodes_leaf_id[cur[is_leaf]]
+            active[done_idx]     = False
+
+            # ── route samples still in internal nodes ─────────────────────
+            live_mask            = ~is_leaf
+            live_sample_idx      = active_idx[live_mask]   # global sample indices
+            live_node_ids        = cur[live_mask]           # which node each is at
+
+            if len(live_sample_idx) == 0:
+                break
+
+            go_left = np.zeros(len(live_sample_idx), dtype=bool)
+
+            # Group samples by node so each node gets ONE matrix multiply.
+            # unique_nodes: the distinct internal nodes that have ≥1 sample.
+            unique_nodes = np.unique(live_node_ids)
+            for ni in unique_nodes:
+                mask   = live_node_ids == ni           # samples at this node
+                feat   = self._nodes_feat[ni]          # feature indices (variable length)
+                coef   = self._nodes_coef[ni]          # coefficients
+                # X[live_sample_idx[mask]][:, feat] is (k, len(feat))
+                # @ coef is (k,) — one matrix multiply for all k samples at ni
+                proj   = X[live_sample_idx[mask]][:, feat] @ coef
+                go_left[mask] = proj <= self._nodes_split[ni]
+
+            node_ids[live_sample_idx] = np.where(
+                go_left,
+                self._nodes_left[live_node_ids],
+                self._nodes_right[live_node_ids],
+            )
+
+        return leaf_ids
 
 
 class RandomHyperplanePartition(_BasePartition):

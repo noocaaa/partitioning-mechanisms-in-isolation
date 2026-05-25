@@ -7,8 +7,7 @@ Sources
 -------
 - sklearn builtins/generators : always available, no download
 - ucimlrepo                   : pip install ucimlrepo  (needs internet)
-- ADBench (ODDS datasets)     : auto-downloaded from GitHub on first run
-                                saved to data/anomaly_detection/
+- ADBench (ODDS datasets)     : auto-downloaded from GitHub on first run saved to data/anomaly_detection/
 
 Usage
 -----
@@ -27,19 +26,13 @@ Usage
 import os
 import io
 import ssl
-import socket
+import threading
 import warnings
 import urllib.request
 
-# UCI ML Repo SSL certificate is sometimes expired;
-# patch urllib so ucimlrepo (and pandas) bypass SSL verification.
-_orig_urlopen = urllib.request.urlopen
-
-def _patched_urlopen(url, data=None, timeout=socket._GLOBAL_DEFAULT_TIMEOUT, **kwargs):
-    kwargs['context'] = ssl._create_unverified_context()
-    return _orig_urlopen(url, data, timeout, **kwargs)
-
-urllib.request.urlopen = _patched_urlopen
+_SSL_NO_VERIFY = ssl.create_default_context()
+_SSL_NO_VERIFY.check_hostname = False
+_SSL_NO_VERIFY.verify_mode = ssl.CERT_NONE
 
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler, LabelEncoder
@@ -95,6 +88,7 @@ class _LazyDataset:
                  dim_level, size_level, source, condition):
         self._loader = loader
         self._data   = None           # populated on first access
+        self._lock   = threading.Lock()
         self._meta = dict(
             name=name, task=task,
             shape=shape, density=density,
@@ -103,8 +97,13 @@ class _LazyDataset:
         )
 
     def _ensure_loaded(self):
-        if self._data is None:
-            self._load()
+        # Fast path: already loaded (no lock needed for read after first write)
+        if self._data is not None:
+            return
+        with self._lock:
+            # Re-check inside lock in case another thread loaded it while we waited
+            if self._data is None:
+                self._load()
 
     def _load(self):
         result = self._loader()
@@ -192,12 +191,9 @@ def _download_adbench(name):
     if os.path.exists(dest):
         return dest
     url = f'{ADBENCH_BASE}/{fname}'
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        data = urllib.request.urlopen(req, context=ctx, timeout=20).read()
+        data = urllib.request.urlopen(req, context=_SSL_NO_VERIFY, timeout=20).read()
         np.load(io.BytesIO(data), allow_pickle=True)
         with open(dest, 'wb') as f:
             f.write(data)
@@ -221,78 +217,64 @@ def _load_adbench(name):
     return None
 
 
-def _load_uci(dataset_id):
-    from ucimlrepo import fetch_ucirepo
-    ds = fetch_ucirepo(id=dataset_id)
-    X = ds.data.features.values.astype(float)
-    y = ds.data.targets.values.ravel()
-    return X, y
+def _register_adbench(name, task, shape, density, dim_level, size_level, condition):
+    _register(name, lambda n=name: _load_adbench(n),
+              task, shape, density, dim_level, size_level, 'adbench', condition)
 
 
-def _register_uci(name, dataset_id, task, shape, density,
-                  dim_level, size_level, condition):
-    def _loader():
+def _register_uci(name, uci_id, task, shape, density, dim_level, size_level, condition):
+    def _loader(uid=uci_id, nm=name):
         try:
-            return _load_uci(dataset_id)
-        except Exception as e:
-            print(f'  SKIP {name:30s} (ucimlrepo id={dataset_id}): {str(e)[:60]}')
+            from ucimlrepo import fetch_ucirepo
+            repo = fetch_ucirepo(id=uid)
+            X = repo.data.features.values.astype(float)
+            y = repo.data.targets.values.ravel()
+            return X, y
+        except Exception:
             return None
-    _register(name, _loader, task, shape, density,
-              dim_level, size_level, 'UCI', condition)
-
-
-def _register_adbench(name, task, shape, density,
-                      dim_level, size_level, condition):
-    def _loader():
-        result = _load_adbench(name)
-        if result is None:
-            print(f'  SKIP {name:30s} (place {ADBENCH_FILES.get(name,"")} in {SAVE_DIR}/)')
-        return result
-    _register(name, _loader, task, shape, density,
-              dim_level, size_level, 'ADBench', condition)
+    _register(name, _loader, task, shape, density, dim_level, size_level, 'uci', condition)
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# CONDITION 1 — Spherical clusters
+# CONDITION 1 — Spherical (baseline / isotropic Gaussian blobs)
 # ══════════════════════════════════════════════════════════════════════════
 
 _register('iris',
           lambda: (load_iris().data, load_iris().target),
           'C', 'spherical', 'uniform', 'low', 'small', 'sklearn', 1)
 
-_register('breast_cancer',
-          lambda: (load_breast_cancer().data, load_breast_cancer().target),
-          'AD', 'spherical', 'uniform', 'mid', 'medium', 'sklearn', 1)
+_register('wine',
+          lambda: (load_wine().data, load_wine().target),
+          'C', 'spherical', 'uniform', 'low', 'small', 'sklearn', 1)
 
 _register('syn_blobs_small',
-          lambda: make_blobs(n_samples=500, centers=3, cluster_std=0.8, random_state=42),
+          lambda: make_blobs(n_samples=300, centers=3, cluster_std=1.0, random_state=42),
           'C', 'spherical', 'uniform', 'low', 'small', 'sklearn_gen', 1)
 
 _register('syn_blobs_medium',
-          lambda: make_blobs(n_samples=3000, centers=4, cluster_std=1.0, random_state=42),
+          lambda: make_blobs(n_samples=1000, centers=5, cluster_std=1.0, random_state=42),
           'C', 'spherical', 'uniform', 'low', 'medium', 'sklearn_gen', 1)
 
-_register_uci('wbc_uci', 15, 'AD', 'spherical', 'uniform', 'mid', 'small', 1)
 _register_adbench('breastw', 'AD', 'spherical', 'uniform', 'low', 'small', 1)
-_register_adbench('wbc', 'AD', 'spherical', 'uniform', 'mid', 'small', 1)
+_register_adbench('wbc', 'AD', 'spherical', 'uniform', 'low', 'small', 1)
+
+_register('breast_cancer',
+          lambda: (load_breast_cancer().data, load_breast_cancer().target),
+          'AD', 'spherical', 'uniform', 'mid', 'small', 'sklearn', 1)
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# CONDITION 2 — Elongated / elliptical clusters
+# CONDITION 2 — Elongated / elliptical
 # ══════════════════════════════════════════════════════════════════════════
-
-_register('wine',
-          lambda: (load_wine().data, load_wine().target),
-          'C', 'elliptical', 'uniform', 'low', 'small', 'sklearn', 2)
 
 _register('syn_elongated_small',
-          lambda: make_blobs(n_samples=500, centers=3,
-                             cluster_std=[3.0, 0.5, 2.0], random_state=42),
+          lambda: make_blobs(n_samples=300, centers=3, cluster_std=[3.0, 1.0, 0.5],
+                             random_state=42),
           'C', 'elliptical', 'uniform', 'low', 'small', 'sklearn_gen', 2)
 
 _register('syn_elongated_medium',
-          lambda: make_blobs(n_samples=800, centers=4,
-                             cluster_std=[4.0, 0.3, 2.5, 1.0], random_state=42),
+          lambda: make_blobs(n_samples=1000, centers=4, cluster_std=[4.0, 1.5, 0.5, 2.0],
+                             random_state=42),
           'C', 'elliptical', 'uniform', 'low', 'medium', 'sklearn_gen', 2)
 
 _register_uci('vehicle', 149, 'C', 'elliptical', 'uniform', 'mid', 'medium', 2)
@@ -383,7 +365,7 @@ _register_uci('ecoli', 39, 'C', 'mixed', 'varying', 'low', 'small', 5)
 _register_uci('yeast', 110, 'C', 'mixed', 'varying', 'low', 'medium', 5)
 _register_adbench('thyroid', 'AD', 'mixed', 'varying', 'low', 'medium', 5)
 _register_adbench('cardio', 'AD', 'mixed', 'varying', 'mid', 'medium', 5)
-_register_adbench('waveform', 'C', 'mixed', 'varying', 'mid', 'medium', 5)
+_register_adbench('waveform', 'AD', 'mixed', 'varying', 'mid', 'medium', 5)
 
 
 # ══════════════════════════════════════════════════════════════════════════
