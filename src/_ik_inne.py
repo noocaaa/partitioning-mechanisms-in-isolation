@@ -122,12 +122,27 @@ class IK_INNE(TransformerMixin, BaseEstimator):
             if self.inclusive:
                 # Mark all hyperspheres that contain each point.
                 distances = pairwise_distances(
-                    X, self._centroids[i], metric="euclidean"
+                    X, self._centroids[i], metric="sqeuclidean"
                 )
-                ik_value = (distances <= self._radius[i]).astype(float)
+                inside = distances <= self._radius[i]
+
+                ik_value = np.zeros_like(distances, dtype=float)
+                euclidean_distances = np.sqrt(distances)
+                ik_value[inside] = 1.0 / np.maximum(
+                    euclidean_distances[inside], MIN_FLOAT
+                )
+
+                # Normalize non-empty rows so each estimator block has unit L2 norm.
+                weight_sum = np.linalg.norm(ik_value, axis=1, keepdims=True)
+                ik_value = np.divide(
+                    ik_value,
+                    weight_sum,
+                    out=np.zeros_like(ik_value),
+                    where=weight_sum > 0,
+                )
             else:
                 nearest_index, nearest_values = pairwise_distances_argmin_min(
-                    X, self._centroids[i], metric="euclidean", axis=1
+                    X, self._centroids[i], metric="sqeuclidean", axis=1
                 )
                 # Filter points outside their nearest hypersphere.
                 out_index = np.arange(n)[
