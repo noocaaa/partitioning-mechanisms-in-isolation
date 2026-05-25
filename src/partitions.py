@@ -71,6 +71,7 @@ PARTITION_PAPERS = {
 # UTILITIES
 # ══════════════════════════════════════════════════════════════════════════
 
+
 def _ik_sim(phi_X, phi_Y, n_est):
     """κ(X,Y) = (1/t) Φ(X) Φ(Y)ᵀ"""
     K = (phi_X @ phi_Y.T) / n_est
@@ -93,6 +94,7 @@ def _idk_scalar(kme_i, kme_j, n_est, normalize=True):
 
 
 # ── Fixed-width leaf mapper (needed for iforest + sciforest) ──────────────
+
 
 class _FixedLeafMapper:
     """
@@ -135,6 +137,7 @@ class _FixedLeafMapper:
 # BASE PARTITION CLASS
 # ══════════════════════════════════════════════════════════════════════════
 
+
 class _BasePartition(TransformerMixin, BaseEstimator):
     """
     Base class for all partitions.
@@ -156,6 +159,49 @@ class _BasePartition(TransformerMixin, BaseEstimator):
         """Sparse binary feature map Φ(X) — same width as training."""
         check_is_fitted(self, "is_fitted_")
         return self._transform_partition(check_array(X).astype(np.float32))
+
+    def average_coverage_rate(self, X, phi=None):
+        """
+        Average point coverage rate across partitionings.
+
+        A point is covered in one partitioning if at least one cell/hypersphere
+        from that partitioning is active for the point. The returned value is
+        the mean of this binary covered/not-covered indicator over all points
+        and partitionings (range [0, 1]).
+        """
+        check_is_fitted(self, "is_fitted_")
+        X = check_array(X).astype(np.float32)
+
+        if self.n_estimators <= 0:
+            return float("nan")
+
+        model = getattr(self, "_model", None)
+        centroids = getattr(model, "_centroids", None)
+        radius = getattr(model, "_radius", None)
+        if centroids is not None and radius is not None:
+            n_blocks = centroids.shape[0]
+            if n_blocks <= 0:
+                return float("nan")
+            covered = np.zeros((X.shape[0], n_blocks), dtype=bool)
+            for j in range(n_blocks):
+                d2 = np.sum((X[:, None, :] - centroids[j][None, :, :]) ** 2, axis=2)
+                covered[:, j] = np.any(d2 <= radius[j][None, :], axis=1)
+            return float(np.mean(covered))
+
+        phi_local = self.transform(X) if phi is None else phi
+        if phi_local.shape[1] % self.n_estimators != 0:
+            return float("nan")
+
+        block_size = phi_local.shape[1] // self.n_estimators
+        indptr = phi_local.indptr
+        indices = phi_local.indices
+        covered_counts = np.zeros(phi_local.shape[0], dtype=np.int32)
+        for i in range(phi_local.shape[0]):
+            start, end = indptr[i], indptr[i + 1]
+            if start == end:
+                continue
+            covered_counts[i] = np.unique(indices[start:end] // block_size).size
+        return float(np.mean(covered_counts) / float(self.n_estimators))
 
     # ── IK ─────────────────────────────────────────────────────────────────
 
@@ -229,6 +275,7 @@ class _BasePartition(TransformerMixin, BaseEstimator):
 # PARTITION 1 — VORONOI (aNNE)
 # ══════════════════════════════════════════════════════════════════════════
 
+
 class VoronoiPartition(_BasePartition):
     """Voronoi (aNNE) — ikpykit IK_ANNE — Section 3.2.3."""
 
@@ -246,6 +293,7 @@ class VoronoiPartition(_BasePartition):
 # ══════════════════════════════════════════════════════════════════════════
 # PARTITION 2 — HYPERSPHERE (iNNE)
 # ══════════════════════════════════════════════════════════════════════════
+
 
 class HyperspherePartition(_BasePartition):
     """Hypersphere (iNNE) — ikpykit IK_INNE — Section 3.2.2."""
@@ -280,6 +328,7 @@ class HyperspherePartitionOverlapping(_BasePartition):
 # PARTITION 3 — AXIS-PARALLEL (iForest)
 # ══════════════════════════════════════════════════════════════════════════
 
+
 class AxisParallelPartition(_BasePartition):
     """Axis-parallel (iForest) — sklearn IsolationForest — Section 3.1."""
 
@@ -305,6 +354,7 @@ class AxisParallelPartition(_BasePartition):
 # ══════════════════════════════════════════════════════════════════════════
 # PARTITION 4 — RANDOM HYPERPLANE (SCiForest) — pure numpy
 # ══════════════════════════════════════════════════════════════════════════
+
 
 class _SCiTree:
     """Single oblique-split tree (Liu et al. ECML 2010)."""
