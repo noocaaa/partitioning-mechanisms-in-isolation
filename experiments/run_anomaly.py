@@ -90,19 +90,14 @@ def _run_anomaly_task(task):
     return run_one(ds, partition, kernel, n_est, max_samples)
 
 
-def _get_auc_consistent_masks(y):
-    """Return normal/anomaly masks aligned with roc_auc_score binary convention.
-
-    For binary targets, sklearn uses the larger/sorted-second label as positive.
-    """
-    y = np.asarray(y)
+def _detect_anomaly_label(y):
     labels = np.unique(y)
-    if labels.size != 2:
-        return None, None
-    positive_label = labels[1]
-    anomaly_mask = y == positive_label
-    normal_mask = ~anomaly_mask
-    return normal_mask, anomaly_mask
+    if len(labels) == 2:
+        counts = np.bincount(y.astype(int))
+        anomaly_label = int(np.argmin(counts))   # rarer class = anomaly
+    else:
+        anomaly_label = 1   # fallback for non-binary (won't compute AUC anyway)
+    return anomaly_label, y == anomaly_label
 
 
 def _load_existing(path, n_estimators, partition_max_samples):
@@ -156,15 +151,15 @@ def run_one(ds, partition_method, kernel, n_estimators, max_samples):
         idx = rng.choice(len(X), MAX_N, replace=False)
         X, y = X[idx], y[idx]
 
+    anomaly_label, anomaly_mask = _detect_anomaly_label(y)
+    normal_mask = ~anomaly_mask
+
     aucs = []
     fit_times, transform_times, score_times = [], [], []
     phi_widths = []
     phi_ones_per_point_per_estimator = []
     phi_ones_per_point_per_estimator_normal = []
     phi_ones_per_point_per_estimator_anomaly = []
-
-    anomaly_mask = y == 1
-    normal_mask = y == 0
 
     for run in range(N_RUNS):
         part = get_partition(
@@ -212,18 +207,14 @@ def run_one(ds, partition_method, kernel, n_estimators, max_samples):
             K = part.similarity_ik(X)
             scores = 1.0 - K.mean(axis=1)
         else:
-            # IDK score: 1 - similarity to global distribution
+            # IDK score: 1 - similarity to training distribution
             scores = part.idk_scores(X)
         score_t = time.perf_counter() - t0
 
         try:
             labels = np.unique(y)
             if len(labels) == 2:
-                counts = np.bincount(y.astype(int))
-                anomaly_label = int(np.argmin(counts))  # rarer class = anomaly
-                # sklearn <1.6 does not support pos_label in roc_auc_score;
-                # flip labels so anomaly is always class 1.
-                y_auc = y if anomaly_label == 1 else 1 - y
+                y_auc = (y == anomaly_label).astype(int)
                 auc = roc_auc_score(y_auc, scores)
             else:
                 auc = float("nan")
@@ -251,7 +242,7 @@ def run_one(ds, partition_method, kernel, n_estimators, max_samples):
         "size_level": ds["size_level"],
         "condition": ds["condition"],
         "source": ds["source"],
-        "anom_rate": round(float(np.mean(y == 1)) * 100.0, 2),
+        "anom_rate": round(float(np.mean(anomaly_mask)) * 100.0, 2),
         # ── performance metrics ───────────────────────────────────
         "auc_mean": round(float(np.nanmean(aucs)), 4),
         "auc_std": round(float(np.nanstd(aucs)), 4),
@@ -408,7 +399,13 @@ def main():
         futures = {pool.submit(_run_anomaly_task, t): t for t in tasks}
         for future in as_completed(futures):
             done += 1
-            row = future.result()
+            try:
+                row = future.result()
+            except Exception as exc:
+                task = futures[future]
+                print(f"  [ERROR] task {task} raised: {exc}")
+                traceback.print_exc()
+                continue
             if row is None:
                 continue
             results.append(row)

@@ -1,7 +1,3 @@
-"""
-ikpykit (c) by Xin Han
-"""
-
 import numpy as np
 from scipy import sparse
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -65,15 +61,6 @@ class IK_INNE(TransformerMixin, BaseEstimator):
         self.inclusive = overlapping
 
     def fit(self, X, y=None):
-        """Fit the model on data X.
-        Parameters
-        ----------
-        X : np.array of shape (n_samples, n_features)
-            The input instances.
-        Returns
-        -------
-        self : object
-        """
         X = check_array(X)
         self.max_samples_ = self.max_samples
         n_samples, n_features = X.shape
@@ -88,8 +75,7 @@ class IK_INNE(TransformerMixin, BaseEstimator):
             rnd = check_random_state(self._seeds[i])
             centroid_index = rnd.choice(n_samples, self.max_samples_, replace=False)
             self._centroids[i] = X[centroid_index]
-            # radius of each hypersphere is the Nearest Neighbors distance of centroid.
-            nn_neighbors, _ = ArgKmin.compute(
+            distances, _indices = ArgKmin.compute(
                 X=self._centroids[i],
                 Y=self._centroids[i],
                 k=2,
@@ -98,22 +84,13 @@ class IK_INNE(TransformerMixin, BaseEstimator):
                 strategy="auto",
                 return_distance=True,
             )
-            self._radius[i] = nn_neighbors[:, 1]
+            # column 0 = distance to self (always 0.0); column 1 = nearest other centroid
+            self._radius[i] = distances[:, 1]
 
         self.is_fitted_ = True
         return self
 
     def transform(self, X):
-        """Compute the isolation kernel feature of X.
-        Parameters
-        ----------
-        X: array-like of shape (n_instances, n_features)
-            The input instances.
-        Returns
-        -------
-        The finite binary features based on the kernel feature map.
-        The features are organized as a n_instances by n_estimators*t matrix.
-        """
         check_is_fitted(self)
         X = check_array(X)
         n, _m = X.shape

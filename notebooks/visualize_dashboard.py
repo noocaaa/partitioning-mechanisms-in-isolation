@@ -656,6 +656,141 @@ def fig_tradeoff(task_filter='all', cond_filter=0, metric_x='total_time_s'):
     return figs
 
 
+def fig_coverage(task='all', cond_filter=0):
+    """Scatter: coverage (phi_ones) vs score."""
+    auc_df, ari_df = _load_results()
+    figs = []
+    for label, df, score_col in [('AD', auc_df, 'auc_mean'), ('Clustering', ari_df, 'ari_mean')]:
+        if df is None or (task != 'all' and task != label[0]):
+            continue
+        if cond_filter > 0:
+            df = df[df['condition'] == cond_filter]
+        if df.empty:
+            continue
+        fig = go.Figure()
+        for p in ALL_PARTS:
+            sub = df[df['partition'] == p]
+            if sub.empty:
+                continue
+            fig.add_trace(go.Scatter(
+                x=sub['phi_ones_per_point_per_estimator'],
+                y=sub[score_col],
+                mode='markers',
+                name=PNAMES.get(p, p),
+                marker=dict(color=PC[p], size=10, opacity=0.75,
+                            line=dict(color='white', width=0.5)),
+                text=sub['dataset'],
+                hovertemplate='<b>%{text}</b><br>coverage: %{x:.3f}<br>score: %{y:.3f}',
+            ))
+        fig.update_layout(
+            **{**BL, 'margin': dict(l=50, r=20, t=50, b=40)},
+            height=340,
+            title=f'<b>{label}</b>  —  coverage vs {score_col}',
+            xaxis=dict(gridcolor=GRID, title='phi_ones per point per estimator',
+                       range=[-0.02, 1.15]),
+            yaxis=dict(gridcolor=GRID, title=score_col),
+        )
+        figs.append(dcc.Graph(figure=fig, config={'displayModeBar': False}))
+    return html.Div(figs) if figs else html.P('No results yet.', style={'color': MUTED})
+
+
+def fig_kernel_delta(task='all', cond_filter=0):
+    """Heatmap: IDK score minus IK score per partition x condition."""
+    auc_df, ari_df = _load_results()
+    figs = []
+    for label, df, score_col in [('AD', auc_df, 'auc_mean'), ('Clustering', ari_df, 'ari_mean')]:
+        if df is None or (task != 'all' and task != label[0]):
+            continue
+        if cond_filter > 0:
+            df = df[df['condition'] == cond_filter]
+        if df.empty:
+            continue
+        piv = df.pivot_table(
+            index='partition', columns='condition', values=score_col, aggfunc='mean'
+        )
+        ik  = df[df['kernel'] == 'ik'].pivot_table(
+            index='partition', columns='condition', values=score_col, aggfunc='mean'
+        )
+        idk = df[df['kernel'] == 'idk'].pivot_table(
+            index='partition', columns='condition', values=score_col, aggfunc='mean'
+        )
+        common = ik.index.intersection(idk.index).intersection(piv.index)
+        delta = idk.loc[common] - ik.loc[common]
+        if delta.empty or delta.shape[1] == 0:
+            continue
+        z = delta.reindex(index=ALL_PARTS).values
+        fig = go.Figure(data=go.Heatmap(
+            z=z,
+            x=[f'C{c} {COND_NAME.get(c,"")}' for c in delta.columns],
+            y=[PNAMES.get(p, p) for p in ALL_PARTS],
+            colorscale='RdBu',
+            zmid=0,
+            text=np.round(z, 3),
+            texttemplate='%{text}',
+            textfont=dict(size=9, color='white'),
+            hovertemplate='%{y}  |  %{x}<br>delta (IDK - IK): %{z:.3f}',
+        ))
+        fig.update_layout(
+            **{**BL, 'margin': dict(l=140, r=20, t=50, b=60)},
+            height=320,
+            title=f'<b>{label}</b>  —  IDK minus IK  (red = IDK worse, blue = IDK better)',
+            xaxis=dict(gridcolor=GRID),
+            yaxis=dict(gridcolor=GRID),
+        )
+        figs.append(dcc.Graph(figure=fig, config={'displayModeBar': False}))
+    return html.Div(figs) if figs else html.P('No results yet.', style={'color': MUTED})
+
+
+def fig_inne_ol_gain(task='all', cond_filter=0):
+    """Bar chart: iNNE-OL minus iNNE per condition."""
+    auc_df, ari_df = _load_results()
+    figs = []
+    for label, df, score_col in [('AD', auc_df, 'auc_mean'), ('Clustering', ari_df, 'ari_mean')]:
+        if df is None or (task != 'all' and task != label[0]):
+            continue
+        if cond_filter > 0:
+            df = df[df['condition'] == cond_filter]
+        if df.empty:
+            continue
+        ik  = df[df['kernel'] == 'ik'].pivot_table(
+            index='condition', columns='partition', values=score_col, aggfunc='mean'
+        )
+        idk = df[df['kernel'] == 'idk'].pivot_table(
+            index='condition', columns='partition', values=score_col, aggfunc='mean'
+        )
+        if 'inne' not in ik.columns or 'inne-overlapping' not in ik.columns:
+            continue
+        gain_ik  = ik['inne-overlapping']  - ik['inne']
+        gain_idk = idk['inne-overlapping'] - idk['inne']
+        conds = gain_ik.index.tolist()
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            x=[f'C{c}' for c in conds],
+            y=gain_ik.values,
+            name='IK kernel',
+            marker_color=PC['inne'], opacity=0.85,
+            text=[f'{v:+.3f}' for v in gain_ik.values],
+            textposition='outside', textfont=dict(color='white', size=9)))
+        fig.add_trace(go.Bar(
+            x=[f'C{c}' for c in conds],
+            y=gain_idk.values,
+            name='IDK kernel',
+            marker_color=PC['inne-overlapping'], opacity=0.85,
+            text=[f'{v:+.3f}' for v in gain_idk.values],
+            textposition='outside', textfont=dict(color='white', size=9)))
+        fig.add_hline(y=0, line_dash='dash', line_color=MUTED, line_width=1)
+        fig.update_layout(
+            **{**BL, 'margin': dict(l=50, r=20, t=55, b=50)},
+            height=320, barmode='group',
+            title=f'<b>{label}</b>  —  iNNE-OL gain over iNNE  (positive = OL wins)',
+            xaxis=dict(gridcolor=GRID, ticktext=[f'C{c} {COND_NAME.get(c,"")}' for c in conds],
+                       tickvals=[f'C{c}' for c in conds]),
+            yaxis=dict(gridcolor=GRID, title=f'delta {score_col}'),
+        )
+        figs.append(dcc.Graph(figure=fig, config={'displayModeBar': False}))
+    return html.Div(figs) if figs else html.P('No results yet.', style={'color': MUTED})
+
+
 def _build_winners(task_filter='all', cond_filter=0):
     """Build the full Winners tab content (chart + table)."""
     auc_df, ari_df = _load_results()
@@ -861,7 +996,7 @@ app.layout = html.Div(
                     style={'color': 'white', 'margin': '0',
                            'fontSize': '18px', 'letterSpacing': '3px'}),
             html.P('Geometry Lab  ·  All 5 Together  ·  Kernel View  ·  Anomaly Scores  ·  '
-                   'Dataset Browser  ·  Trade-off  ·  Winners',
+                   'Dataset Browser  ·  Trade-off  ·  Winners  ·  Coverage  ·  IK vs IDK  ·  iNNE-OL Gain',
                    style={'color': MUTED, 'margin': '4px 0 0 0', 'fontSize': '10px'}),
         ], style={'marginBottom': '16px', 'borderBottom': f'1px solid {BORDER}',
                   'paddingBottom': '14px'}),
@@ -874,6 +1009,9 @@ app.layout = html.Div(
             dcc.Tab(label='Dataset Browser',    value='browser',  style=TS, selected_style=TA),
             dcc.Tab(label='Trade-off',          value='tradeoff', style=TS, selected_style=TA),
             dcc.Tab(label='Winners',            value='winners',  style=TS, selected_style=TA),
+    dcc.Tab(label='Coverage',           value='coverage', style=TS, selected_style=TA),
+    dcc.Tab(label='IK vs IDK',          value='kdelta',   style=TS, selected_style=TA),
+    dcc.Tab(label='iNNE-OL Gain',       value='olgain',   style=TS, selected_style=TA),
         ]),
         html.Div(id='tab-content',
                  style={'backgroundColor': CARD, 'borderRadius': '0 10px 10px 10px',
@@ -1158,6 +1296,93 @@ def render(tab):
             html.Div(id='w-content'),
         ])
 
+    # ── 8. Coverage ───────────────────────────────────────────────────────
+    elif tab == 'coverage':
+        return html.Div([
+            html.Div([
+                html.Div([
+                    _lbl('Show task'),
+                    dcc.RadioItems(id='cov-task',
+                        options=[
+                            {'label': '  Both',              'value': 'all'},
+                            {'label': '  Anomaly Detection', 'value': 'AD'},
+                            {'label': '  Clustering',        'value': 'C'},
+                        ],
+                        value='all', inline=True,
+                        labelStyle={'marginRight': '16px'},
+                        style={'color': TEXT, 'fontSize': '11px', 'marginTop': '6px'}),
+                ], style={'marginRight': '24px'}),
+                html.Div([
+                    _lbl('Filter by condition'),
+                    _dd('cov-cond',
+                        [{'label': 'All conditions', 'value': 0}] +
+                        [{'label': f'C{c} — {COND_NAME[c]}', 'value': c}
+                         for c in range(1, 8)],
+                        0, '200px'),
+                ]),
+            ], style={'display': 'flex', 'flexWrap': 'wrap',
+                      'marginBottom': '14px', 'alignItems': 'flex-end'}),
+            html.Div(id='cov-figs'),
+        ])
+
+    # ── 9. IK vs IDK ──────────────────────────────────────────────────────
+    elif tab == 'kdelta':
+        return html.Div([
+            html.Div([
+                html.Div([
+                    _lbl('Show task'),
+                    dcc.RadioItems(id='kd-task',
+                        options=[
+                            {'label': '  Both',              'value': 'all'},
+                            {'label': '  Anomaly Detection', 'value': 'AD'},
+                            {'label': '  Clustering',        'value': 'C'},
+                        ],
+                        value='all', inline=True,
+                        labelStyle={'marginRight': '16px'},
+                        style={'color': TEXT, 'fontSize': '11px', 'marginTop': '6px'}),
+                ], style={'marginRight': '24px'}),
+                html.Div([
+                    _lbl('Filter by condition'),
+                    _dd('kd-cond',
+                        [{'label': 'All conditions', 'value': 0}] +
+                        [{'label': f'C{c} — {COND_NAME[c]}', 'value': c}
+                         for c in range(1, 8)],
+                        0, '200px'),
+                ]),
+            ], style={'display': 'flex', 'flexWrap': 'wrap',
+                      'marginBottom': '14px', 'alignItems': 'flex-end'}),
+            html.Div(id='kd-figs'),
+        ])
+
+    # ── 10. iNNE-OL Gain ──────────────────────────────────────────────────
+    elif tab == 'olgain':
+        return html.Div([
+            html.Div([
+                html.Div([
+                    _lbl('Show task'),
+                    dcc.RadioItems(id='ol-task',
+                        options=[
+                            {'label': '  Both',              'value': 'all'},
+                            {'label': '  Anomaly Detection', 'value': 'AD'},
+                            {'label': '  Clustering',        'value': 'C'},
+                        ],
+                        value='all', inline=True,
+                        labelStyle={'marginRight': '16px'},
+                        style={'color': TEXT, 'fontSize': '11px', 'marginTop': '6px'}),
+                ], style={'marginRight': '24px'}),
+                html.Div([
+                    _lbl('Filter by condition'),
+                    _dd('ol-cond',
+                        [{'label': 'All conditions', 'value': 0}] +
+                        [{'label': f'C{c} — {COND_NAME[c]}', 'value': c}
+                         for c in range(1, 8)],
+                        0, '200px'),
+                ]),
+            ], style={'display': 'flex', 'flexWrap': 'wrap',
+                      'marginBottom': '14px', 'alignItems': 'flex-end'}),
+            html.Div(id='ol-figs'),
+        ])
+
 
 # ══════════════════════════════════════════════════════════════════════════
 # CALLBACKS
@@ -1226,6 +1451,24 @@ def cb_tradeoff(task, cond, xmet):
 def cb_winners(tab, task, cond):
     if tab != 'winners': return []
     return _build_winners(task or 'all', cond or 0)
+
+@callback(Output('cov-figs','children'),
+          Input('tabs','value'), Input('cov-task','value'), Input('cov-cond','value'))
+def cb_coverage(tab, task, cond):
+    if tab != 'coverage': return []
+    return fig_coverage(task or 'all', cond or 0)
+
+@callback(Output('kd-figs','children'),
+          Input('tabs','value'), Input('kd-task','value'), Input('kd-cond','value'))
+def cb_kdelta(tab, task, cond):
+    if tab != 'kdelta': return []
+    return fig_kernel_delta(task or 'all', cond or 0)
+
+@callback(Output('ol-figs','children'),
+          Input('tabs','value'), Input('ol-task','value'), Input('ol-cond','value'))
+def cb_olgain(tab, task, cond):
+    if tab != 'olgain': return []
+    return fig_inne_ol_gain(task or 'all', cond or 0)
 
 
 if __name__ == '__main__':
