@@ -1,7 +1,7 @@
 import numpy as np
 from scipy import sparse
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.metrics import pairwise_distances, pairwise_distances_argmin_min
+from sklearn.metrics import pairwise_distances
 from sklearn.metrics._pairwise_distances_reduction import ArgKmin
 from sklearn.utils import check_array
 from sklearn.utils.validation import check_is_fitted, check_random_state
@@ -49,7 +49,15 @@ class IK_INNE(TransformerMixin, BaseEstimator):
     In Proceedings of the AAAI Conference on Artificial Intelligence, Vol. 33, 2019, July, pp. 4755-4762
     """
 
-    def __init__(self, n_estimators, max_samples, random_state=None, overlapping=False):
+    def __init__(
+        self,
+        n_estimators,
+        max_samples,
+        random_state=None,
+        overlapping=False,
+        r=1.0,
+        weighting="boundary",
+    ):
         self.n_estimators = n_estimators
         self.max_samples = max_samples
         self.random_state = random_state
@@ -59,6 +67,8 @@ class IK_INNE(TransformerMixin, BaseEstimator):
         self._radius = None
         self._centroids = None
         self.inclusive = overlapping
+        self.r = r
+        self.weighting = weighting
 
     def fit(self, X, y=None):
         X = check_array(X)
@@ -85,7 +95,7 @@ class IK_INNE(TransformerMixin, BaseEstimator):
                 return_distance=True,
             )
             # column 0 = distance to self (always 0.0); column 1 = nearest other centroid
-            self._radius[i] = distances[:, 1]
+            self._radius[i] = distances[:, 1] * self.r
 
         self.is_fitted_ = True
         return self
@@ -93,21 +103,26 @@ class IK_INNE(TransformerMixin, BaseEstimator):
     def transform(self, X):
         check_is_fitted(self)
         X = check_array(X)
+        weighting = str(self.weighting).lower()
+        if weighting not in {"binary", "boundary"}:
+            raise ValueError("weighting must be one of {'binary', 'boundary'}")
+
         n, _m = X.shape
-        embedding = None
+        blocks = []
         for i in range(self.n_estimators):
+            distances = pairwise_distances(X, self._centroids[i], metric="sqeuclidean")
+            inside = distances <= self._radius[i]
+
             if self.inclusive:
                 # Mark all hyperspheres that contain each point.
-                distances = pairwise_distances(
-                    X, self._centroids[i], metric="sqeuclidean"
-                )
-                inside = distances <= self._radius[i]
-
                 ik_value = np.zeros_like(distances, dtype=float)
-                euclidean_distances = np.sqrt(distances)
-                ik_value[inside] = 1.0 / np.maximum(
-                    euclidean_distances[inside], MIN_FLOAT
-                )
+                if weighting == "binary":
+                    ik_value[inside] = 1.0
+                else:
+                    # Boundary-aware weights: higher near centroid, 0 at sphere boundary.
+                    radius = np.maximum(self._radius[i], MIN_FLOAT)
+                    boundary_weights = 1.0 - (distances / radius)
+                    ik_value = np.where(inside, np.maximum(boundary_weights, 0.0), 0.0)
 
                 # Normalize non-empty rows so each estimator block has unit L2 norm.
                 weight_sum = np.linalg.norm(ik_value, axis=1, keepdims=True)
@@ -118,19 +133,15 @@ class IK_INNE(TransformerMixin, BaseEstimator):
                     where=weight_sum > 0,
                 )
             else:
-                nearest_index, nearest_values = pairwise_distances_argmin_min(
-                    X, self._centroids[i], metric="sqeuclidean", axis=1
-                )
-                # Filter points outside their nearest hypersphere.
-                out_index = np.arange(n)[
-                    nearest_values > self._radius[i][nearest_index]
-                ]
-                ik_value = np.eye(self.max_samples_)[nearest_index]
-                ik_value[out_index] = 0
+                ik_value = np.zeros_like(distances, dtype=float)
+                masked_distances = np.where(inside, distances, np.inf)
+                covered_rows = np.any(inside, axis=1)
 
-            ik_value_sparse = sparse.csr_matrix(ik_value)
-            if embedding is None:
-                embedding = ik_value_sparse
-            else:
-                embedding = sparse.hstack((embedding, ik_value_sparse))
-        return embedding
+                # Keep only one hypersphere: closest centroid among covering ones.
+                if np.any(covered_rows):
+                    nearest = np.argmin(masked_distances[covered_rows], axis=1)
+                    ik_value[covered_rows, nearest] = 1.0
+
+            blocks.append(sparse.csr_matrix(ik_value))
+
+        return sparse.hstack(blocks, format="csr")

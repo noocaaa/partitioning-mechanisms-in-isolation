@@ -9,6 +9,8 @@ Usage:
     python experiments/run_clustering.py
     python experiments/run_clustering.py --fast
     python experiments/run_clustering.py --t 200 --psi 256
+    python experiments/run_clustering.py --t 200 --psi 16 --r 3
+    python experiments/run_clustering.py --t 200 --psi 16 --k 1,2
     python experiments/run_clustering.py --dataset iris
     python experiments/run_clustering.py --partition anne
     python experiments/run_clustering.py --partition anne inne
@@ -18,6 +20,7 @@ Usage:
 import os, sys, time, argparse, warnings, traceback
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from itertools import product
 
 import numpy as np
 import pandas as pd
@@ -45,6 +48,7 @@ DEFAULT_MAX_SAMPLES_BY_PARTITION = {
 RANDOM_STATE = 42
 N_RUNS = 5
 MAX_N = 5000  # subsample threshold for large datasets
+DEFAULT_INNE_R = 1.0
 OUT_DIR = os.path.join(ROOT, "results", "clustering")
 OUT_PATH = os.path.join(OUT_DIR, "ari_results.csv")
 RESULT_COLUMNS = [
@@ -80,31 +84,147 @@ RESULT_COLUMNS = [
     "phi_ones_per_point_per_estimator",
     "n_estimators",
     "max_samples",
+    "r",
+    "k",
+    "weighting",
     "n_runs",
 ]
+
+INNE_METHODS = {"inne", "inne-overlapping"}
+WEIGHTING_METHODS = {"anne", "inne-overlapping"}
+VALID_WEIGHTING = {"binary", "boundary"}
 
 
 def _run_clustering_task(task):
     """Worker: run one (dataset, partition, kernel) combination."""
-    ds_name, partition, kernel, n_est, max_samples = task
+    (
+        ds_name,
+        partition,
+        kernel,
+        n_est,
+        max_samples,
+        r_value,
+        k_value,
+        weighting_value,
+    ) = task
     from data.datasets import DATASETS
 
     ds = DATASETS[ds_name]
-    return run_one(ds, partition, kernel, n_est, max_samples)
+    return run_one(
+        ds,
+        partition,
+        kernel,
+        n_est,
+        max_samples,
+        r_value,
+        k_value,
+        weighting_value,
+    )
 
 
-def _load_existing(path, n_estimators, partition_max_samples):
-    """Load existing CSV and return completed keys for current estimator/psi config."""
+def _normalize_r_value(value):
+    if pd.isna(value):
+        return ""
+    if value == "":
+        return ""
+    return float(value)
+
+
+def _normalize_weighting_value(value):
+    if pd.isna(value):
+        return ""
+    token = str(value).strip().lower()
+    if token in {"", "nan"}:
+        return ""
+    return token
+
+
+def _normalize_k_value(value):
+    if pd.isna(value):
+        return ""
+    if value == "":
+        return ""
+    return int(value)
+
+
+def _normalize_existing_k(row):
+    if row.get("partition") == "anne":
+        value = row.get("k", "")
+        return 1 if value == "" or pd.isna(value) else int(value)
+    return ""
+
+
+def _normalize_existing_r(row):
+    partition = row.get("partition")
+    value = row.get("r", "")
+    if partition in INNE_METHODS:
+        if value == "" or pd.isna(value):
+            return DEFAULT_INNE_R
+        return float(value)
+    return ""
+
+
+def _effective_weighting(partition, k_value, weighting_value):
+    if partition not in WEIGHTING_METHODS:
+        return ""
+    if partition == "anne" and int(k_value) == 1:
+        return ""
+    return str(weighting_value).strip().lower()
+
+
+def _normalize_existing_weighting(row):
+    partition = row.get("partition")
+    k_value = row.get("k", "")
+    value = row.get("weighting", "")
+    if value == "":
+        return ""
+    return _effective_weighting(partition, k_value, value)
+
+
+def _parse_multi_values(raw_values, cast, arg_name):
+    if raw_values is None:
+        return None
+    tokens = []
+    for value in raw_values:
+        for token in str(value).split(","):
+            token = token.strip()
+            if token:
+                tokens.append(token)
+    if not tokens:
+        raise ValueError(f"No valid values provided for --{arg_name}")
+
+    parsed = []
+    for token in tokens:
+        try:
+            parsed.append(cast(token))
+        except Exception as exc:
+            raise ValueError(f"Invalid value for --{arg_name}: {token}") from exc
+
+    # Preserve order while removing duplicates.
+    return list(dict.fromkeys(parsed))
+
+
+def _load_existing(path, n_estimators, partitions):
+    """Load existing CSV and return completed keys for current estimator/partition set."""
     if not os.path.exists(path):
         return set(), []
     try:
         df = pd.read_csv(path)
-        # Keep only rows matching requested estimator and per-partition max_samples.
+        if "r" not in df.columns:
+            df["r"] = ""
+        if "k" not in df.columns:
+            df["k"] = ""
+        if "weighting" not in df.columns:
+            df["weighting"] = ""
+        df["r"] = df["r"].apply(_normalize_r_value)
+        df["r"] = df.apply(_normalize_existing_r, axis=1)
+        df["k"] = df["k"].apply(_normalize_k_value)
+        df["k"] = df.apply(_normalize_existing_k, axis=1)
+        df["weighting"] = df["weighting"].apply(_normalize_weighting_value)
+        df["weighting"] = df.apply(_normalize_existing_weighting, axis=1)
+        # Keep only rows matching requested estimator and selected partitions.
         df_match = df[df["n_estimators"] == n_estimators]
-        df_match = df_match[df_match["partition"].isin(partition_max_samples.keys())]
-        df_match = df_match[
-            df_match["max_samples"] == df_match["partition"].map(partition_max_samples)
-        ]
+        df_match = df_match[df_match["partition"].isin(partitions)]
         keys = set(
             zip(
                 df_match["dataset"],
@@ -112,6 +232,9 @@ def _load_existing(path, n_estimators, partition_max_samples):
                 df_match["kernel"],
                 df_match["n_estimators"],
                 df_match["max_samples"],
+                df_match["r"],
+                df_match["k"],
+                df_match["weighting"],
             )
         )
         return keys, df_match.to_dict("records")
@@ -135,7 +258,16 @@ def _append_row(row, path):
     df.to_csv(path, mode="a", header=header, index=False)
 
 
-def run_one(ds, partition_method, kernel, n_estimators, max_samples):
+def run_one(
+    ds,
+    partition_method,
+    kernel,
+    n_estimators,
+    max_samples,
+    r_value,
+    k_value,
+    weighting_value,
+):
     X = ds["X"].astype(np.float32)
     y = ds["y"]
     n_clusters = len(np.unique(y))
@@ -151,6 +283,9 @@ def run_one(ds, partition_method, kernel, n_estimators, max_samples):
     phi_widths = []
     coverage_rates = []
     phi_ones_per_point_per_estimator = []
+    effective_weighting = _effective_weighting(
+        partition_method, k_value, weighting_value
+    )
 
     for run in range(N_RUNS):
         part = get_partition(
@@ -159,6 +294,9 @@ def run_one(ds, partition_method, kernel, n_estimators, max_samples):
             n_estimators=n_estimators,
             max_samples=max_samples,
             random_state=RANDOM_STATE + run,
+            **({"k": k_value} if partition_method == "anne" else {}),
+            **({"r": r_value} if partition_method in INNE_METHODS else {}),
+            **({"weighting": effective_weighting} if effective_weighting else {}),
         )
 
         # ── fit ──────────────────────────────────────────────────
@@ -171,7 +309,7 @@ def run_one(ds, partition_method, kernel, n_estimators, max_samples):
         phi = part.transform(X)
         transform_t = time.perf_counter() - t0
         phi_widths.append(phi.shape[1])
-        coverage_rates.append(part.average_coverage_rate(X, phi=phi))
+        coverage_rates.append(part.average_coverage_rate(X, phi=phi, t=n_estimators))
         phi_ones_per_point_per_estimator.append(
             float(phi.nnz) / float(phi.shape[0] * n_estimators)
         )
@@ -280,6 +418,9 @@ def run_one(ds, partition_method, kernel, n_estimators, max_samples):
         ),
         "n_estimators": n_estimators,
         "max_samples": max_samples,
+        "r": r_value if partition_method in INNE_METHODS else "",
+        "k": k_value if partition_method == "anne" else "",
+        "weighting": effective_weighting,
         "n_runs": N_RUNS,
     }
 
@@ -300,15 +441,37 @@ def main():
         "--psi",
         "--max-samples",
         dest="psi",
-        type=int,
+        nargs="+",
+        type=str,
         default=None,
-        help="Maximum samples per estimator (defaults to the script constant)",
+        help="One or more max_samples values (space/comma-separated)",
     )
     parser.add_argument(
         "--partition",
         nargs="+",
         default=None,
         help="One or more partitions (space-separated and/or comma-separated)",
+    )
+    parser.add_argument(
+        "--r",
+        nargs="+",
+        type=str,
+        default=None,
+        help="One or more radius multipliers for iNNE/iNNE-overlapping (space/comma-separated)",
+    )
+    parser.add_argument(
+        "--k",
+        nargs="+",
+        type=str,
+        default=None,
+        help="One or more nearest-centroid values for aNNE (anne only; defaults to 1)",
+    )
+    parser.add_argument(
+        "--weighting",
+        nargs="+",
+        type=str,
+        default=None,
+        help="Weighting mode(s) for anne/inne-overlapping: binary or boundary",
     )
     args = parser.parse_args()
 
@@ -341,10 +504,51 @@ def main():
     else:
         partitions = PARTITIONS
 
-    partition_max_samples = {
-        p: (args.psi if args.psi is not None else DEFAULT_MAX_SAMPLES_BY_PARTITION[p])
-        for p in partitions
-    }
+    try:
+        psi_values = _parse_multi_values(args.psi, int, "psi")
+        r_values = _parse_multi_values(args.r, float, "r")
+        k_values = _parse_multi_values(args.k, int, "k")
+        weighting_values = _parse_multi_values(args.weighting, str, "weighting")
+    except ValueError as exc:
+        parser.error(str(exc))
+
+    if k_values is None:
+        k_values = [1]
+
+    if weighting_values is None:
+        weighting_values = ["boundary"]
+    else:
+        weighting_values = [str(v).strip().lower() for v in weighting_values]
+        invalid_weighting = sorted(set(weighting_values) - VALID_WEIGHTING)
+        if invalid_weighting:
+            parser.error(
+                f"Unknown weighting value(s): {', '.join(invalid_weighting)}. "
+                f"Valid options: {', '.join(sorted(VALID_WEIGHTING))}"
+            )
+
+    partition_param_grid = {}
+    for p in partitions:
+        psi_list = (
+            psi_values
+            if psi_values is not None
+            else [DEFAULT_MAX_SAMPLES_BY_PARTITION[p]]
+        )
+        r_list = r_values if (p in INNE_METHODS and r_values is not None) else [""]
+        k_list = k_values if p == "anne" else [""]
+        if p == "anne":
+            combos = []
+            for psi, r, k in product(psi_list, r_list, k_list):
+                local_weighting = [""] if int(k) == 1 else weighting_values
+                for w in local_weighting:
+                    combos.append((psi, r, k, w))
+            partition_param_grid[p] = combos
+        else:
+            if p in INNE_METHODS:
+                r_list = r_values if r_values is not None else [DEFAULT_INNE_R]
+            weighting_list = weighting_values if p in WEIGHTING_METHODS else [""]
+            partition_param_grid[p] = list(
+                product(psi_list, r_list, k_list, weighting_list)
+            )
 
     print("=" * 68)
     print("  IK Partitioning Study — Clustering Experiments")
@@ -352,17 +556,25 @@ def main():
     print(f"  Datasets   : {len(cl_datasets)}")
     print(f"  Partitions : {partitions}")
     print(f"  Kernels    : {KERNELS}")
-    if args.psi is not None:
-        print(f"  n_est      : {n_est}   psi (override): {args.psi}")
+    if psi_values is not None:
+        print(f"  n_est      : {n_est}   psi values: {psi_values}")
     else:
-        psi_desc = ", ".join(f"{p}={partition_max_samples[p]}" for p in partitions)
+        psi_desc = ", ".join(
+            f"{p}={DEFAULT_MAX_SAMPLES_BY_PARTITION[p]}" for p in partitions
+        )
         print(f"  n_est      : {n_est}   psi defaults: {psi_desc}")
+    if r_values is not None:
+        print(f"  r (iNNE)   : {r_values}")
+    if "anne" in partitions:
+        print(f"  k (aNNE)   : {k_values}")
+    if any(p in WEIGHTING_METHODS for p in partitions):
+        print(f"  weighting  : {weighting_values}")
     print(f"  Runs each  : {N_RUNS}")
     print(f"  Output     : {OUT_DIR}")
     print("=" * 68)
     print()
 
-    completed, results = _load_existing(OUT_PATH, n_est, partition_max_samples)
+    completed, results = _load_existing(OUT_PATH, n_est, partitions)
     total = len(cl_datasets) * len(partitions) * len(KERNELS)
     done = len(results)
     skipped = 0
@@ -370,13 +582,38 @@ def main():
     tasks = []
     for ds in cl_datasets:
         for partition in partitions:
-            partition_psi = partition_max_samples[partition]
-            for kernel in KERNELS:
-                key = (ds["name"], partition, kernel, n_est, partition_psi)
-                if key in completed:
-                    skipped += 1
-                    continue
-                tasks.append((ds["name"], partition, kernel, n_est, partition_psi))
+            for (
+                partition_psi,
+                partition_r,
+                partition_k,
+                partition_weighting,
+            ) in partition_param_grid[partition]:
+                for kernel in KERNELS:
+                    key = (
+                        ds["name"],
+                        partition,
+                        kernel,
+                        n_est,
+                        partition_psi,
+                        partition_r,
+                        partition_k,
+                        partition_weighting,
+                    )
+                    if key in completed:
+                        skipped += 1
+                        continue
+                    tasks.append(
+                        (
+                            ds["name"],
+                            partition,
+                            kernel,
+                            n_est,
+                            partition_psi,
+                            partition_r,
+                            partition_k,
+                            partition_weighting,
+                        )
+                    )
 
     total = len(tasks) + skipped
     done = skipped

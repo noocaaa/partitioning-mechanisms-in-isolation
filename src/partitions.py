@@ -34,7 +34,11 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.ensemble import IsolationForest
 from sklearn.utils import check_array, check_random_state
 from sklearn.utils.validation import check_is_fitted
-from ikpykit.kernel._ik_anne import IK_ANNE
+
+try:
+    from ._ik_anne import IK_ANNE
+except ImportError:
+    from _ik_anne import IK_ANNE
 
 try:
     from ._ik_inne import IK_INNE
@@ -53,7 +57,7 @@ PARTITION_NAMES = {
 }
 
 PARTITION_GEOMETRY = {
-    "anne": "Voronoi cells — nearest centroid assignment",
+    "anne": "Voronoi cells — weighted k-nearest centroid assignment",
     "inne": "Hyperspheres — radius = NN distance of centroid",
     "iforest": "Hyper-rectangles — axis-aligned recursive splits",
     "sciforest": "Oblique partitions — random linear combination splits",
@@ -97,11 +101,11 @@ class _FixedLeafMapper:
     def fit(self, leaves_train):
         n, n_est = leaves_train.shape
         self._offsets = []
-        self._uid_arrays = []   # sorted unique leaf IDs per tree
-        self._col_arrays = []   # corresponding column indices per tree
+        self._uid_arrays = []  # sorted unique leaf IDs per tree
+        self._col_arrays = []  # corresponding column indices per tree
         total = 0
         for t in range(n_est):
-            uids = np.unique(leaves_train[:, t])          # already sorted by np.unique
+            uids = np.unique(leaves_train[:, t])  # already sorted by np.unique
             cols = np.arange(len(uids), dtype=np.int32)  # 0, 1, 2, ...
             self._uid_arrays.append(uids.astype(np.int64))
             self._col_arrays.append(cols)
@@ -125,7 +129,7 @@ class _FixedLeafMapper:
             pos = np.searchsorted(uids, leaf_col)
             # clip to valid range (unseen leaves at test time map to column 0)
             pos = np.clip(pos, 0, len(uids) - 1)
-            matched = uids[pos] == leaf_col          # True where leaf was seen in training
+            matched = uids[pos] == leaf_col  # True where leaf was seen in training
             mapped_cols = np.where(matched, col_map[pos] + off, off)  # unseen → col 0
             rows_list.append(np.arange(n_samples))
             cols_list.append(mapped_cols)
@@ -160,48 +164,37 @@ class _BasePartition(TransformerMixin, BaseEstimator):
         check_is_fitted(self, "is_fitted_")
         return self._transform_partition(check_array(X).astype(np.float32))
 
-    def average_coverage_rate(self, X, phi=None):
+    def average_coverage_rate(self, X, phi=None, t=None):
         """
-        Average point coverage rate across partitionings.
+        Average point coverage rate across partitioning blocks.
 
-        A point is covered in one partitioning if at least one cell/hypersphere
-        from that partitioning is active for the point. The returned value is
-        the mean of this binary covered/not-covered indicator over all points
-        and partitionings (range [0, 1]).
+        Coverage is computed directly from ``phi`` by splitting its columns into
+        ``t`` contiguous blocks. A sample is covered in a block if any value in
+        that block is non-zero. The returned value is the mean of this binary
+        covered/not-covered indicator over all samples and blocks (range [0, 1]).
         """
         check_is_fitted(self, "is_fitted_")
         X = check_array(X).astype(np.float32)
 
-        if self.n_estimators <= 0:
+        t = self.n_estimators if t is None else int(t)
+        if t <= 0:
             return float("nan")
-
-        model = getattr(self, "_model", None)
-        centroids = getattr(model, "_centroids", None)
-        radius = getattr(model, "_radius", None)
-        if centroids is not None and radius is not None:
-            n_blocks = centroids.shape[0]
-            if n_blocks <= 0:
-                return float("nan")
-            covered = np.zeros((X.shape[0], n_blocks), dtype=bool)
-            for j in range(n_blocks):
-                d2 = np.sum((X[:, None, :] - centroids[j][None, :, :]) ** 2, axis=2)
-                covered[:, j] = np.any(d2 <= radius[j][None, :], axis=1)
-            return float(np.mean(covered))
 
         phi_local = self.transform(X) if phi is None else phi
-        if phi_local.shape[1] % self.n_estimators != 0:
+        if phi_local.shape[1] % t != 0:
             return float("nan")
 
-        block_size = phi_local.shape[1] // self.n_estimators
-        indptr = phi_local.indptr
-        indices = phi_local.indices
-        covered_counts = np.zeros(phi_local.shape[0], dtype=np.int32)
-        for i in range(phi_local.shape[0]):
-            start, end = indptr[i], indptr[i + 1]
-            if start == end:
-                continue
-            covered_counts[i] = np.unique(indices[start:end] // block_size).size
-        return float(np.mean(covered_counts) / float(self.n_estimators))
+        block_size = phi_local.shape[1] // t
+        covered = np.zeros((phi_local.shape[0], t), dtype=bool)
+
+        for j in range(t):
+            block = phi_local[:, j * block_size : (j + 1) * block_size]
+            if sparse.issparse(block):
+                covered[:, j] = block.getnnz(axis=1) > 0
+            else:
+                covered[:, j] = np.any(block != 0, axis=1)
+
+        return float(np.mean(covered))
 
     # ── IK ─────────────────────────────────────────────────────────────────
 
@@ -228,8 +221,8 @@ class _BasePartition(TransformerMixin, BaseEstimator):
 
     def idk_scores(self, X, normalize=True):
         check_is_fitted(self, "is_fitted_")
-        phi_X = self.transform(X)                          # (n, d) sparse
-        g_kme = self._train_kme                            # (d,) from fit()
+        phi_X = self.transform(X)  # (n, d) sparse
+        g_kme = self._train_kme  # (d,) from fit()
 
         # Vectorized IDK: each row of phi_X dotted with g_kme
         # raw(i) = phi_X[i] · g_kme / n_est
@@ -270,11 +263,25 @@ class _BasePartition(TransformerMixin, BaseEstimator):
 class VoronoiPartition(_BasePartition):
     """Voronoi (aNNE) — ikpykit IK_ANNE — Section 3.2.3."""
 
+    def __init__(
+        self,
+        n_estimators=200,
+        max_samples=16,
+        random_state=42,
+        k=1,
+        weighting="boundary",
+    ):
+        super().__init__(n_estimators, max_samples, random_state)
+        self.k = k
+        self.weighting = weighting
+
     def _fit_partition(self, X):
         self._model = IK_ANNE(
             n_estimators=self.n_estimators,
             max_samples=self.max_samples,
             random_state=self.random_state,
+            k=self.k,
+            weighting=self.weighting,
         ).fit(X)
 
     def _transform_partition(self, X):
@@ -286,33 +293,47 @@ class VoronoiPartition(_BasePartition):
 # ══════════════════════════════════════════════════════════════════════════
 
 
-class HyperspherePartition(_BasePartition):
+class _HyperspherePartitionBase(_BasePartition):
+    """Shared iNNE wiring with optional radius multiplier."""
+
+    overlapping = False
+
+    def __init__(
+        self,
+        n_estimators=200,
+        max_samples=16,
+        random_state=42,
+        r=None,
+        weighting="boundary",
+    ):
+        super().__init__(n_estimators, max_samples, random_state)
+        self.r = r
+        self.weighting = weighting
+
+    def _fit_partition(self, X):
+        inne = IK_INNE(
+            n_estimators=self.n_estimators,
+            max_samples=self.max_samples,
+            random_state=self.random_state,
+            overlapping=self.overlapping,
+            weighting=self.weighting,
+        )
+        if self.r is not None:
+            inne.r = self.r
+        self._model = inne.fit(X)
+
+    def _transform_partition(self, X):
+        return self._model.transform(X)
+
+
+class HyperspherePartition(_HyperspherePartitionBase):
     """Hypersphere (iNNE) — ikpykit IK_INNE — Section 3.2.2."""
 
-    def _fit_partition(self, X):
-        self._model = IK_INNE(
-            n_estimators=self.n_estimators,
-            max_samples=self.max_samples,
-            random_state=self.random_state,
-        ).fit(X)
 
-    def _transform_partition(self, X):
-        return self._model.transform(X)
-
-
-class HyperspherePartitionOverlapping(_BasePartition):
+class HyperspherePartitionOverlapping(_HyperspherePartitionBase):
     """Hypersphere (iNNE) with overlapping regions — Section 3.2.2."""
 
-    def _fit_partition(self, X):
-        self._model = IK_INNE(
-            n_estimators=self.n_estimators,
-            max_samples=self.max_samples,
-            random_state=self.random_state,
-            overlapping=True,
-        ).fit(X)
-
-    def _transform_partition(self, X):
-        return self._model.transform(X)
+    overlapping = True
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -387,15 +408,15 @@ class _SCiTree:
     def fit(self, X):
         self._tree = self._build(X)
         self._ids(self._tree)
-        self._nodes_feat  = []   # list of feat arrays, one per internal node
-        self._nodes_coef  = []
+        self._nodes_feat = []  # list of feat arrays, one per internal node
+        self._nodes_coef = []
         self._nodes_split = []
-        self._nodes_left  = []   # child node index (-1 = leaf)
+        self._nodes_left = []  # child node index (-1 = leaf)
         self._nodes_right = []
-        self._nodes_leaf_id = [] # leaf id (-1 = internal node)
+        self._nodes_leaf_id = []  # leaf id (-1 = internal node)
         self._compile(self._tree)
         self._nodes_split = np.array(self._nodes_split, dtype=np.float32)
-        self._nodes_left  = np.array(self._nodes_left,  dtype=np.int32)
+        self._nodes_left = np.array(self._nodes_left, dtype=np.int32)
         self._nodes_right = np.array(self._nodes_right, dtype=np.int32)
         self._nodes_leaf_id = np.array(self._nodes_leaf_id, dtype=np.int32)
         return self
@@ -414,36 +435,36 @@ class _SCiTree:
             self._nodes_feat.append(node["feat"])
             self._nodes_coef.append(node["coef"])
             self._nodes_split.append(node["split"])
-            self._nodes_left.append(-1)   # placeholder
+            self._nodes_left.append(-1)  # placeholder
             self._nodes_right.append(-1)  # placeholder
             self._nodes_leaf_id.append(-1)
             left_idx = len(self._nodes_split)
             self._compile(node["left"])
             right_idx = len(self._nodes_split)
             self._compile(node["right"])
-            self._nodes_left[idx]  = left_idx
+            self._nodes_left[idx] = left_idx
             self._nodes_right[idx] = right_idx
 
     def apply(self, X):
         n = len(X)
-        node_ids = np.zeros(n, dtype=np.int32)   # all start at root (node 0)
-        leaf_ids  = np.full(n, -1, dtype=np.int32)
-        active    = np.ones(n, dtype=bool)
+        node_ids = np.zeros(n, dtype=np.int32)  # all start at root (node 0)
+        leaf_ids = np.full(n, -1, dtype=np.int32)
+        active = np.ones(n, dtype=bool)
 
         while active.any():
             active_idx = np.where(active)[0]
-            cur        = node_ids[active_idx]
+            cur = node_ids[active_idx]
 
             # ── settle samples that landed on a leaf ──────────────────────
-            is_leaf              = self._nodes_leaf_id[cur] >= 0
-            done_idx             = active_idx[is_leaf]
-            leaf_ids[done_idx]   = self._nodes_leaf_id[cur[is_leaf]]
-            active[done_idx]     = False
+            is_leaf = self._nodes_leaf_id[cur] >= 0
+            done_idx = active_idx[is_leaf]
+            leaf_ids[done_idx] = self._nodes_leaf_id[cur[is_leaf]]
+            active[done_idx] = False
 
             # ── route samples still in internal nodes ─────────────────────
-            live_mask            = ~is_leaf
-            live_sample_idx      = active_idx[live_mask]   # global sample indices
-            live_node_ids        = cur[live_mask]           # which node each is at
+            live_mask = ~is_leaf
+            live_sample_idx = active_idx[live_mask]  # global sample indices
+            live_node_ids = cur[live_mask]  # which node each is at
 
             if len(live_sample_idx) == 0:
                 break
@@ -454,12 +475,12 @@ class _SCiTree:
             # unique_nodes: the distinct internal nodes that have ≥1 sample.
             unique_nodes = np.unique(live_node_ids)
             for ni in unique_nodes:
-                mask   = live_node_ids == ni           # samples at this node
-                feat   = self._nodes_feat[ni]          # feature indices (variable length)
-                coef   = self._nodes_coef[ni]          # coefficients
+                mask = live_node_ids == ni  # samples at this node
+                feat = self._nodes_feat[ni]  # feature indices (variable length)
+                coef = self._nodes_coef[ni]  # coefficients
                 # X[live_sample_idx[mask]][:, feat] is (k, len(feat))
                 # @ coef is (k,) — one matrix multiply for all k samples at ni
-                proj   = X[live_sample_idx[mask]][:, feat] @ coef
+                proj = X[live_sample_idx[mask]][:, feat] @ coef
                 go_left[mask] = proj <= self._nodes_split[ni]
 
             node_ids[live_sample_idx] = np.where(
@@ -524,7 +545,7 @@ def get_partition(
     n_estimators : t  in the paper (default 200)
     max_samples  : psi  in the paper (default 16)
     random_state : seed (default 42)
-    **kwargs     : e.g. n_dims=3 for sciforest
+    **kwargs     : e.g. k=3 for anne, n_dims=3 for sciforest
 
     After part.fit(X_train):
         part.similarity_ik(X_test)       → IK  matrix (n×n)
@@ -595,7 +616,7 @@ if __name__ == "__main__":
             print(f"    IDK scores  : [{scores.min():.3f}, {scores.max():.3f}]")
             print(f"    status      : {'OK ✓' if ok else 'FAIL ✗'}")
 
-        except Exception as e:
+        except Exception:
             import traceback
 
             print(f"\n  {method}: FAILED")

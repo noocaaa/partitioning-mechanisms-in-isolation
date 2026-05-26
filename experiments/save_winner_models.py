@@ -29,12 +29,20 @@ def _winners(csv_path, metric):
         print(f"  SKIP {csv_path} not found")
         return {}
     df = pd.read_csv(csv_path)
+    if "k" not in df.columns:
+        df["k"] = ""
+    df.loc[df["partition"] == "anne", "k"] = df.loc[
+        df["partition"] == "anne", "k"
+    ].replace("", 1)
+    df["k"] = df["k"].apply(
+        lambda value: 1 if value == "" or pd.isna(value) else int(value)
+    )
     df = df.sort_values("timestamp").drop_duplicates(
-        ["dataset", "partition", "kernel"], keep="last"
+        ["dataset", "partition", "kernel", "k"], keep="last"
     )
     best = df.loc[df.groupby("dataset")[metric].idxmax()]
     return {
-        r["dataset"]: (r["partition"], r["kernel"], r[metric])
+        r["dataset"]: (r["partition"], r["kernel"], r.get("k", ""), r[metric])
         for _, r in best.iterrows()
     }
 
@@ -49,10 +57,10 @@ def main():
     cl_win = _winners(cl_path, "ari_mean")
 
     all_winners = {}
-    for ds_name, (part, kern, score) in ad_win.items():
-        all_winners.setdefault(ds_name, {})["ad"] = (part, kern, score)
-    for ds_name, (part, kern, score) in cl_win.items():
-        all_winners.setdefault(ds_name, {})["cl"] = (part, kern, score)
+    for ds_name, (part, kern, k_value, score) in ad_win.items():
+        all_winners.setdefault(ds_name, {})["ad"] = (part, kern, k_value, score)
+    for ds_name, (part, kern, k_value, score) in cl_win.items():
+        all_winners.setdefault(ds_name, {})["cl"] = (part, kern, k_value, score)
 
     print("=" * 60)
     print("  Saving winner models")
@@ -65,16 +73,26 @@ def main():
             continue
         X = ds["X"].astype(np.float32)
 
-        for task_key, (part, kern, score) in tasks.items():
+        for task_key, (part, kern, k_value, score) in tasks.items():
             tag = "AD" if task_key == "ad" else "CL"
-            pkl = os.path.join(out_dir, f"{ds_name}_{tag}_{part}.pkl")
+            suffix = (
+                f"_{part}_k{k_value}"
+                if part == "anne" and k_value != ""
+                else f"_{part}"
+            )
+            pkl = os.path.join(out_dir, f"{ds_name}_{tag}{suffix}.pkl")
             if os.path.exists(pkl):
                 print(f"  EXIST {pkl}")
                 continue
 
             print(f"  FIT   {ds_name:28s} {tag}  {part:20s}  {score:.3f}")
             part_obj = get_partition(
-                part, kernel=kern, n_estimators=200, max_samples=16, random_state=42
+                part,
+                kernel=kern,
+                n_estimators=200,
+                max_samples=16,
+                random_state=42,
+                **({"k": int(k_value)} if part == "anne" and k_value != "" else {}),
             )
             part_obj.fit(X)
             joblib.dump(part_obj, pkl)
